@@ -28,13 +28,14 @@ class Settings(BaseSettings):
     llm_provider:   str = "ollama"
     llm_api_key:    str = "ollama"          # Ollama不需要真实key
     llm_base_url:   str = "http://localhost:11434/v1"
-    llm_model:      str = "qwen3.5:latest"      # 改成你本地的模型名
-    llm_model_fast: str = "qwen3.5:latest"
+    llm_model:      str = "qwen2.5:7b"      # 改成你本地的模型名
+    llm_model_fast: str = "qwen2.5:7b"
 
     # Embedding
-    embedding_api_key:  str = "ollama"
-    embedding_base_url: str = "http://localhost:11434/v1"
-    embedding_model:    str = "nomic-embed-text"
+    embedding_api_key:    str = "ollama"
+    embedding_base_url:   str = "http://localhost:11434/v1"
+    embedding_model:      str = "nomic-embed-text"
+    embedding_vector_size:int = 768   # 本地Ollama=768，线上QWen/OpenAI=1536
 
     # Judge0
     judge0_url:     str = ""

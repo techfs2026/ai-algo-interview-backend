@@ -5,7 +5,7 @@ from app.core.config import get_settings
 settings       = get_settings()
 qdrant_client: AsyncQdrantClient | None = None
 
-VECTOR_SIZE = 1536  # text-embedding-3-small 维度
+VECTOR_SIZE = settings.embedding_vector_size  # 从配置读取，本地768，线上1536
 
 
 async def init_qdrant() -> None:
