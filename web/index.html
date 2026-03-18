@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlgoInterview · AI 算法面试</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/tomorrow-night-eighties.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ① 首页 -->
+<div id="pg-home" class="pg on">
+  <nav class="nav"><div class="logo">algo<em>interview</em></div></nav>
+  <main class="home-main">
+    <div class="home-text">
+      <p class="eyebrow">AI 驱动 · 画像定制</p>
+      <h1>像真实面试<br><em>一样练习</em></h1>
+      <p class="lead">系统根据你的能力画像精准选题，全程 AI 陪同分析，每次练习都有价值。</p>
+      <button class="cta" onclick="App.init()">开始面试</button>
+    </div>
+    <div class="home-demo">
+      <div class="demo-window">
+        <div class="demo-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="demo-filename">solution.py</span>
+        </div>
+        <div class="demo-code">
+<span class="t-kw">class</span> <span class="t-cl">Solution</span>:
+    <span class="t-kw">def</span> <span class="t-fn">twoSum</span>(self, nums, target):
+        seen = {}
+        <span class="t-kw">for</span> i, n <span class="t-kw">in</span> <span class="t-fn">enumerate</span>(nums):
+            diff = target - n
+            <span class="t-kw">if</span> diff <span class="t-kw">in</span> seen:
+                <span class="t-kw">return</span> [seen[diff], i]
+            seen[n] = i</div>
+        <div class="demo-footer">
+          <span class="chip green">✓ 3/3 通过</span>
+          <span class="chip gray">O(n) 时间复杂度</span>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ② 问卷 -->
+<div id="pg-quiz" class="pg">
+  <nav class="nav">
+    <div class="logo">algo<em>interview</em></div>
+    <div class="nav-user" id="nav-user"></div>
+  </nav>
+  <main class="quiz-main">
+    <header class="quiz-header">
+      <p class="eyebrow">初始评估</p>
+      <h2>你的算法水平怎么样？</h2>
+      <p class="lead sm">如实评估效果更好，我们会根据结果为你精准选题。</p>
+      <div class="legend">
+        <span>1 完全不会</span><span>2 会做简单题</span><span>3 会做中等题</span>
+        <span>4 会做难题</span><span>5 难不倒我</span>
+      </div>
+    </header>
+    <div class="skills-grid" id="skills-grid"></div>
+    <button class="cta" onclick="App.submitQuiz()">确认，开始面试</button>
+  </main>
+</div>
+
+<!-- ③ 面试 -->
+<div id="pg-interview" class="pg">
+  <nav class="nav interview-nav">
+    <div class="logo sm">algo<em>interview</em></div>
+    <div class="nav-center">
+      <span class="diff-tag" id="diff-tag"></span>
+      <span class="timer" id="timer">--:--</span>
+    </div>
+    <div class="nav-right">
+      <button class="btn-outline sm" id="btn-swap" onclick="App.swap()">换题</button>
+      <button class="btn-solid sm" onclick="App.submit()">提交</button>
+    </div>
+  </nav>
+  <div class="interview-body">
+    <aside class="q-panel" id="q-panel">
+      <div class="q-meta">
+        <h2 id="q-title">加载中…</h2>
+        <div id="q-tags" class="tag-row"></div>
+      </div>
+      <div class="q-reason" id="q-reason"></div>
+      <div class="q-content" id="q-content">
+        <div class="skel"></div><div class="skel sm"></div>
+        <div class="skel"></div><div class="skel sm"></div>
+      </div>
+    </aside>
+    <div class="e-panel">
+      <div class="e-bar">
+        <select id="lang" class="lang-sel" onchange="App.changeLang(this.value)">
+          <option value="python">Python 3</option>
+          <option value="javascript">JavaScript</option>
+        </select>
+      </div>
+      <div id="editor"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ④ 结果 -->
+<div id="pg-result" class="pg">
+  <nav class="nav">
+    <div class="logo sm">algo<em>interview</em></div>
+    <button class="btn-outline" onclick="App.again()">再来一题 →</button>
+  </nav>
+  <main class="result-main">
+    <div class="r-verdict" id="r-verdict"></div>
+    <div class="r-card" id="r-analysis">
+      <p class="card-label">AI 代码分析</p>
+      <div class="analysis-body" id="analysis-body">
+        <div class="thinking">
+          <span class="dot-pulse"></span>
+          <span class="dot-pulse d2"></span>
+          <span class="dot-pulse d3"></span>
+          <span>AI 正在分析…</span>
+        </div>
+      </div>
+    </div>
+    <div class="r-card" id="r-recs" style="display:none">
+      <p class="card-label">推荐练习</p>
+      <div class="rec-grid" id="rec-grid"></div>
+    </div>
+  </main>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

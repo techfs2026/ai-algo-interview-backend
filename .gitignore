@@ -25,5 +25,7 @@ Thumbs.db
 
 logs/
 
+note.md
+
 # 数据库迁移（保留migrations目录但忽略自动生成的版本文件）
 # alembic/versions/*.py  # 取消注释可忽略迁移文件

@@ -40,14 +40,14 @@ app.add_middleware(
 )
 
 # ─── 路由注册 ─────────────────────────────────────────
-from app.api.v1 import users, interview
+from app.api.v1 import users
 app.include_router(users.router, prefix="/api/v1/users", tags=["用户"])
-app.include_router(interview.router, prefix="/api/v1/interview", tags=["面试"])
-# 后续逐步添加
-# from app.api.v1 import questions, interview, analysis
-# app.include_router(questions.router, prefix="/api/v1/questions", tags=["题目"])
 
-# app.include_router(analysis.router,  prefix="/api/v1/analysis",  tags=["分析"])
+from app.api.v1 import interview
+app.include_router(interview.router, prefix="/api/v1/interview", tags=["面试"])
+
+from app.api.v1 import analysis
+app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["分析"])
 
 
 @app.get("/health")
