@@ -8,10 +8,8 @@ from pydantic import BaseModel, Field
 # ─── 选题请求/响应 ────────────────────────────────────────────────────────────
 
 class StartInterviewRequest(BaseModel):
-    difficulty: str | None = Field(
-        None,
-        description="指定难度 easy/medium/hard，None 则由系统根据画像决定"
-    )
+    difficulty:            str | None = Field(None, description="指定难度")
+    preferred_question_id: int | None = Field(None, description="推荐题单点击时传入，优先选这道题")
 
 
 class QuestionBrief(BaseModel):
@@ -44,6 +42,7 @@ class SwapQuestionRequest(BaseModel):
 
 
 class SwapQuestionResponse(BaseModel):
+    session_id:     str
     question:       QuestionBrief
     select_reason:  str
     swap_remaining: int   = Field(description="今日剩余换题次数")

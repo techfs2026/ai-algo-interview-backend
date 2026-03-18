@@ -60,8 +60,28 @@ async def start_interview(
             detail="请先完成初始问卷再开始面试"
         )
 
-    # 执行选题
-    selected, reason, focus = await select_question(profile, qdrant, db)
+    # 如果前端传了 preferred_question_id（推荐题单点击），优先选这道题
+    if req.preferred_question_id:
+        from sqlalchemy import select as sa_select2
+        pref_result = await db.execute(
+            sa_select2(Question).where(Question.id == req.preferred_question_id)
+        )
+        pref_q = pref_result.scalar_one_or_none()
+        if pref_q:
+            selected = {
+                "id":         pref_q.id,
+                "title":      pref_q.title,
+                "difficulty": pref_q.difficulty,
+                "tags":       pref_q.tags,
+                "ac_rate":    pref_q.ac_rate,
+            }
+            reason = "来自推荐题单"
+            focus  = "根据上一题分析结果定向练习"
+        else:
+            selected, reason, focus = await select_question(profile, qdrant, db)
+    else:
+        # 正常 AI 选题
+        selected, reason, focus = await select_question(profile, qdrant, db)
 
     if not selected:
         raise HTTPException(
@@ -147,10 +167,23 @@ async def swap_question(
     )
     question = result.scalar_one_or_none()
 
+    # 创建新的面试会话
+    new_session = InterviewSession(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        question_id=question.id,
+        time_limit=DIFFICULTY_TIME_MAP.get(question.difficulty, 1800),
+        status="active",
+        select_reason=reason,
+    )
+    db.add(new_session)
+    await db.flush()
+
     # 消耗换题配额
     remaining = await user_service.consume_swap_quota(user_id)
 
     return SwapQuestionResponse(
+        session_id=new_session.id,
         question=QuestionBrief(
             id=question.id,
             title=question.title,
