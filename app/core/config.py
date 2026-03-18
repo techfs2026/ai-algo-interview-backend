@@ -44,9 +44,9 @@ class Settings(BaseSettings):
     # LLM调用参数
     llm_max_tokens:       int   = 1000
     llm_temperature:      float = 0.7
-    llm_timeout_select:   int   = 8
-    llm_timeout_analyze:  int   = 30
-    llm_timeout_feedback: int   = 30
+    llm_timeout_select:   int   = 60
+    llm_timeout_analyze:  int   = 120
+    llm_timeout_feedback: int   = 120
     llm_max_retries:      int   = 2
 
     # 业务配置

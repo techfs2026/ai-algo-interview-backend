@@ -28,7 +28,7 @@ import sys
 import os
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import httpx
 from openai import AsyncOpenAI
@@ -40,9 +40,9 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.models.models import Question
-from scripts.leetcode_client import fetch_question_by_slug, parse_question_meta
-from scripts.semantic_expander import expand_question_semantic, build_index_text
-from scripts.question_slugs import get_slugs_by_difficulty
+from scripts.build_vector_index.leetcode_client import fetch_question_by_slug, parse_question_meta
+from scripts.build_vector_index.semantic_expander import expand_question_semantic, build_index_text
+from scripts.build_vector_index.question_slugs import get_slugs_by_difficulty
 
 logging.basicConfig(
     level=logging.INFO,
