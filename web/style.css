@@ -448,7 +448,9 @@ h1 em { font-style: italic; color: var(--ink-3); }
 /* ── 结果页 ─────────────────────────────────────────── */
 #pg-result { background: var(--paper-2); }
 .result-main {
-  max-width: 740px;
+  width: 740px;
+  max-width: 100%;
+  min-width: min(740px, 100%);
   margin: 0 auto;
   padding: 28px 20px 80px;
   display: flex;
@@ -640,4 +642,244 @@ h1 em { font-style: italic; color: var(--ink-3); }
   .rec-grid       { grid-template-columns: 1fr; }
   .nav            { padding: 0 20px; }
   .result-main    { padding: 20px 16px 60px; }
+}
+
+/* ── 推荐题卡片底部 ─────────────────────────────────── */
+.rec-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.rec-action {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  transition: color .15s;
+}
+.rec-item:hover .rec-action { color: var(--ink); }
+
+/* ── KaTeX 样式修正 ─────────────────────────────────── */
+.katex { font-size: 1em; }
+.katex-display { margin: 12px 0; overflow-x: auto; }
+.analysis-body .katex-display { text-align: left; }
+
+/* ── 打字光标 ────────────────────────────────────────── */
+.type-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background: var(--ink-3);
+  vertical-align: text-bottom;
+  margin-left: 1px;
+  border-radius: 1px;
+  animation: blink .9s step-end infinite;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* ── 全局用户栏 ─────────────────────────────────────── */
+.user-bar {
+  position: fixed;
+  top: 12px;
+  right: 20px;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--paper);
+  border: 1.5px solid var(--line-2);
+  border-radius: 20px;
+  padding: 5px 12px 5px 8px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  transition: border-color .15s, box-shadow .15s;
+}
+.user-chip:hover {
+  border-color: var(--ink-3);
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.user-chip-dot {
+  width: 6px; height: 6px;
+  background: var(--green);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.user-chip-stats {
+  color: var(--ink-4);
+  font-size: 10px;
+  margin-left: 2px;
+}
+.user-chip-reset {
+  background: transparent;
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+  width: 28px; height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--ink-4);
+  cursor: pointer;
+  transition: all .15s;
+}
+.user-chip-reset:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
+}
+
+/* ── 统计弹窗 ────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.3);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+}
+.modal-box {
+  background: var(--paper);
+  border-radius: var(--r4);
+  width: 440px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  animation: up .2s ease;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 0;
+}
+.modal-header h3 {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: var(--ink-4);
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+.modal-close:hover { color: var(--ink); }
+
+.modal-stats {
+  display: flex;
+  gap: 0;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.mstat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  border-right: 1px solid var(--line);
+  padding: 8px 0;
+}
+.mstat:last-child { border-right: none; }
+.mstat-val {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.mstat-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  letter-spacing: .5px;
+}
+
+.modal-skills { padding: 16px 24px 24px; }
+.modal-skills-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-bottom: 12px;
+}
+.skill-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.skill-bar-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  min-width: 56px;
+  text-align: right;
+}
+.skill-bar-track {
+  flex: 1;
+  height: 6px;
+  background: var(--paper-3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.skill-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ink);
+  transition: width .4s ease;
+}
+.skill-bar-fill.low    { background: #e87070; }
+.skill-bar-fill.mid    { background: #e8a84a; }
+.skill-bar-fill.high   { background: var(--green); }
+.skill-bar-level {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  min-width: 28px;
+}
+
+/* ── 面试页内嵌用户按钮 ─────────────────────────────── */
+.interview-user {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-4);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.interview-user:hover {
+  border-color: var(--ink-3);
+  color: var(--ink-2);
+}
+
+/* ── 面试 nav 分隔线 ────────────────────────────────── */
+.nav-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--line-2);
+  margin: 0 4px;
 }

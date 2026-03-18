@@ -8,13 +8,38 @@
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/tomorrow-night-eighties.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- ① 首页 -->
+<!-- ── 全局用户栏（登录后所有页面显示）─────────────── -->
+<div id="user-bar" class="user-bar" style="display:none">
+  <button class="user-chip" onclick="App.showStats()" id="user-chip">
+    <span class="user-chip-dot"></span>
+    <span id="user-chip-name"></span>
+    <span class="user-chip-stats" id="user-chip-stats"></span>
+  </button>
+  <button class="user-chip-reset" onclick="App.clearUser()" title="重置用户">↺</button>
+</div>
+
+<!-- ── 用户统计弹窗 ──────────────────────────────────── -->
+<div id="stats-modal" class="modal-overlay" style="display:none" onclick="App.closeStats()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="modal-username"></h3>
+      <button class="modal-close" onclick="App.closeStats()">✕</button>
+    </div>
+    <div class="modal-stats" id="modal-stats"></div>
+    <div class="modal-skills" id="modal-skills"></div>
+  </div>
+</div>
+
+<!-- ① 首页 ────────────────────────────────────────────── -->
 <div id="pg-home" class="pg on">
-  <nav class="nav"><div class="logo">algo<em>interview</em></div></nav>
+  <nav class="nav">
+    <div class="logo">algo<em>interview</em></div>
+  </nav>
   <main class="home-main">
     <div class="home-text">
       <p class="eyebrow">AI 驱动 · 画像定制</p>
@@ -46,11 +71,10 @@
   </main>
 </div>
 
-<!-- ② 问卷 -->
+<!-- ② 问卷 ────────────────────────────────────────────── -->
 <div id="pg-quiz" class="pg">
   <nav class="nav">
     <div class="logo">algo<em>interview</em></div>
-    <div class="nav-user" id="nav-user"></div>
   </nav>
   <main class="quiz-main">
     <header class="quiz-header">
@@ -67,17 +91,19 @@
   </main>
 </div>
 
-<!-- ③ 面试 -->
+<!-- ③ 面试 ────────────────────────────────────────────── -->
 <div id="pg-interview" class="pg">
   <nav class="nav interview-nav">
     <div class="logo sm">algo<em>interview</em></div>
     <div class="nav-center">
       <span class="diff-tag" id="diff-tag"></span>
       <span class="timer" id="timer">--:--</span>
-    </div>
-    <div class="nav-right">
+      <div class="nav-divider"></div>
       <button class="btn-outline sm" id="btn-swap" onclick="App.swap()">换题</button>
       <button class="btn-solid sm" onclick="App.submit()">提交</button>
+    </div>
+    <div class="nav-right">
+      <button class="interview-user" onclick="App.showStats()" id="interview-user-btn"></button>
     </div>
   </nav>
   <div class="interview-body">
@@ -104,11 +130,14 @@
   </div>
 </div>
 
-<!-- ④ 结果 -->
+<!-- ④ 结果 ────────────────────────────────────────────── -->
 <div id="pg-result" class="pg">
   <nav class="nav">
     <div class="logo sm">algo<em>interview</em></div>
-    <button class="btn-outline" onclick="App.again()">再来一题 →</button>
+    <div class="nav-center">
+      <button class="btn-outline" onclick="App.again()">再来一题 →</button>
+    </div>
+    <div class="nav-right"></div>
   </nav>
   <main class="result-main">
     <div class="r-verdict" id="r-verdict"></div>
@@ -136,6 +165,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

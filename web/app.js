@@ -12,45 +12,46 @@ const TAGS = [
 ];
 
 const TPL = {
-  python: `class Solution:\n    def solve(self):\n        pass\n`,
+  python:     `class Solution:\n    def solve(self):\n        pass\n`,
   javascript: `/**\n * @return {any}\n */\nvar solve = function() {\n    \n};\n`,
 };
 
-// ── 状态 ───────────────────────────────────────────────
+const SKEL = `
+  <div class="skel"></div><div class="skel sm"></div>
+  <div class="skel"></div><div class="skel sm"></div>`;
+
+// ── 状态 ─────────────────────────────────────────────
 const S = {
   userId:    null,
   username:  null,
   sessionId: null,
   question:  null,
-  swapLeft:  2,
+  swapLeft:  2,       // 本地记录剩余换题次数
   timeLeft:  0,
   timerId:   null,
   editor:    null,
   ratings:   Object.fromEntries(TAGS.map(t => [t, 3])),
 };
 
-// ── 工具 ───────────────────────────────────────────────
-const $  = id => document.getElementById(id);
-const el = (tag, cls, html) => {
-  const e = document.createElement(tag);
-  if (cls)  e.className   = cls;
-  if (html) e.innerHTML   = html;
-  return e;
-};
+// ── 工具 ─────────────────────────────────────────────
+const $ = id => document.getElementById(id);
 
 function show(name) {
-  document.querySelectorAll('.pg').forEach(p => {
-    p.classList.toggle('on', p.id === `pg-${name}`);
-  });
+  document.querySelectorAll('.pg').forEach(p =>
+    p.classList.toggle('on', p.id === `pg-${name}`)
+  );
+  // 只有登录后才显示用户栏，面试页不显示（按钮已在 nav-center）
+  const bar = $('user-bar');
+  if (bar) bar.style.display = (S.userId && name !== 'interview') ? 'flex' : 'none';
   window.scrollTo(0, 0);
 }
 
-function toast(msg, ms = 3200) {
+function toast(msg, ms = 3000) {
   const t = $('toast');
   t.textContent = msg;
   t.classList.add('show');
-  clearTimeout(t._tid);
-  t._tid = setTimeout(() => t.classList.remove('show'), ms);
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('show'), ms);
 }
 
 async function req(method, path, body) {
@@ -66,47 +67,72 @@ async function req(method, path, body) {
   return r.json();
 }
 
-// ── 持久化 ─────────────────────────────────────────────
+// ── 持久化 ───────────────────────────────────────────
 const store = {
-  save: (uid, uname) => { localStorage.setItem('uid', uid); localStorage.setItem('uname', uname); },
-  load: () => ({ uid: localStorage.getItem('uid'), uname: localStorage.getItem('uname') }),
-  clear: () => { localStorage.removeItem('uid'); localStorage.removeItem('uname'); },
+  save:  (uid, uname) => {
+    localStorage.setItem('uid', uid);
+    localStorage.setItem('uname', uname);
+  },
+  load:  () => ({
+    uid:   localStorage.getItem('uid'),
+    uname: localStorage.getItem('uname'),
+  }),
+  clear: () => {
+    localStorage.removeItem('uid');
+    localStorage.removeItem('uname');
+  },
 };
 
-// ── 计时器 ─────────────────────────────────────────────
+// ── 计时器 ───────────────────────────────────────────
 function startTimer(secs) {
   S.timeLeft = secs;
   clearInterval(S.timerId);
-  tick();
-  S.timerId = setInterval(tick, 1000);
+  _tick();
+  S.timerId = setInterval(_tick, 1000);
 }
 
-function tick() {
+function _tick() {
   S.timeLeft = Math.max(0, S.timeLeft - 1);
-  const m = String(Math.floor(S.timeLeft / 60)).padStart(2, '0');
-  const s = String(S.timeLeft % 60).padStart(2, '0');
+  const m  = String(Math.floor(S.timeLeft / 60)).padStart(2, '0');
+  const s  = String(S.timeLeft % 60).padStart(2, '0');
   const el = $('timer');
   el.textContent = `${m}:${s}`;
-  el.className = 'timer' + (S.timeLeft < 120 ? ' danger' : S.timeLeft < 300 ? ' warn' : '');
-  if (S.timeLeft === 0) { clearInterval(S.timerId); App.submit(); }
+  el.className   = 'timer'
+    + (S.timeLeft < 120 ? ' danger' : S.timeLeft < 300 ? ' warn' : '');
+  if (S.timeLeft === 0) {
+    clearInterval(S.timerId);
+    App.submit();
+  }
 }
 
-// ── 问卷渲染 ───────────────────────────────────────────
+// ── 换题按钮状态 ──────────────────────────────────────
+function updateSwapBtn(remaining) {
+  S.swapLeft = remaining;
+  const btn  = $('btn-swap');
+  btn.textContent = remaining > 0 ? `换题 (${remaining})` : '换题 (0)';
+  btn.disabled    = remaining <= 0;
+  btn.style.opacity = remaining <= 0 ? '0.4' : '';
+}
+
+// ── 问卷渲染 ─────────────────────────────────────────
 function renderQuiz() {
-  const grid = $('skills-grid');
-  grid.innerHTML = '';
+  $('skills-grid').innerHTML = '';
   TAGS.forEach(tag => {
-    const row = el('div', 'skill-row');
-    row.innerHTML = `<span class="skill-name">${tag}</span><div class="skill-btns" id="rb-${tag}">
-      ${[1,2,3,4,5].map(n =>
-        `<button class="rb${n === 3 ? ' on' : ''}" onclick="App.rate('${tag}',${n})">${n}</button>`
-      ).join('')}
-    </div>`;
-    grid.appendChild(row);
+    const row = document.createElement('div');
+    row.className = 'skill-row';
+    row.innerHTML = `
+      <span class="skill-name">${tag}</span>
+      <div class="skill-btns" id="rb-${tag}">
+        ${[1,2,3,4,5].map(n =>
+          `<button class="rb${n === 3 ? ' on' : ''}"
+                   onclick="App.rate('${tag}',${n})">${n}</button>`
+        ).join('')}
+      </div>`;
+    $('skills-grid').appendChild(row);
   });
 }
 
-// ── 编辑器 ─────────────────────────────────────────────
+// ── 编辑器 ───────────────────────────────────────────
 function initEditor(lang = 'python') {
   if (S.editor) { S.editor.toTextArea(); S.editor = null; }
   $('editor').innerHTML = '<textarea id="_cm"></textarea>';
@@ -123,119 +149,266 @@ function initEditor(lang = 'python') {
   S.editor.setValue(TPL[lang]);
 }
 
-// ── Markdown 轻量渲染 ──────────────────────────────────
-function md(text) {
-  return text
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br>')
-    .replace(/^(?!<[h2h3p])/, '<p>')
-    + (text.endsWith('\n') ? '' : '</p>');
+// ── 题目面板重置（换题/新题前必须调用）──────────────
+function resetQuestionPanel() {
+  $('q-title').textContent  = '加载中…';
+  $('q-tags').innerHTML     = '';
+  $('q-reason').textContent = '';
+  $('q-content').innerHTML  = SKEL;
 }
 
-// ── 流式分析 ───────────────────────────────────────────
-function streamAnalysis(sessionId) {
-  const body   = $('analysis-body');
-  let started  = false;
-  let buf      = '';
-
-  const es = new EventSource(`${API}/analysis/stream/${sessionId}`);
-
-  es.onmessage = ({ data }) => {
-    const d = JSON.parse(data);
-
-    if (d.type === 'chunk') {
-      if (!started) { body.innerHTML = ''; started = true; }
-      buf += d.content;
-      body.innerHTML = md(buf);
-    }
-
-    if (d.type === 'done') {
-      es.close();
-      App.complete(sessionId);
-    }
-
-    if (d.type === 'error') {
-      es.close();
-      if (!started) body.innerHTML = `<p style="color:var(--red)">${d.message}</p>`;
-    }
-  };
-
-  es.onerror = () => {
-    es.close();
-    if (!started) body.innerHTML = '<p style="color:var(--ink-4)">分析服务暂时不可用</p>';
-  };
+// ── 还原旧题目（换题失败时调用）─────────────────────
+function restoreQuestion() {
+  if (!S.question) return;
+  renderQuestion(S.question, null);
+  loadContent(S.sessionId);
 }
 
-// ── 推荐题单 ───────────────────────────────────────────
-function renderRecs(recs) {
-  if (!recs?.length) return;
-  const typeLabel = { related: '相关练习', weakness: '薄弱点', new: '新知识点' };
-  $('rec-grid').innerHTML = recs.map(r => `
-    <div class="rec-item"
-         onclick="window.open('https://leetcode.cn/problems/${r.title_slug}/','_blank')">
-      <div class="rec-type">${typeLabel[r.recommend_type] || '推荐'}</div>
-      <div class="rec-title">${r.title}</div>
-      <div class="rec-why">${r.reason}</div>
-      <span class="diff-pill ${r.difficulty}">${r.difficulty.toUpperCase()}</span>
-    </div>`).join('');
-  $('r-recs').style.display = 'block';
-}
-
-// ── 题目内容渲染 ───────────────────────────────────────
-async function loadContent(sessionId) {
-  try {
-    const c = await req('GET', `/interview/session/${sessionId}/content`);
-    $('q-content').innerHTML = c.content || '<p>暂无描述</p>';
-    // 更新代码模板
-    const lang    = $('lang').value;
-    const snippet = c.code_snippets?.find(s => s.langSlug === lang);
-    if (snippet && S.editor) S.editor.setValue(snippet.code);
-  } catch {
-    $('q-content').innerHTML = '<p style="color:var(--ink-4)">题目内容加载失败，请刷新</p>';
-  }
-}
-
-// ── 渲染题目基本信息 ───────────────────────────────────
 function renderQuestion(q, reason) {
-  $('q-title').textContent = q.title;
+  $('q-title').textContent  = q.title;
   $('q-reason').textContent = reason ? `💡 ${reason}` : '';
   const tag = $('diff-tag');
   tag.textContent = q.difficulty.toUpperCase();
   tag.className   = `diff-tag ${q.difficulty}`;
   $('q-tags').innerHTML = (q.tags || [])
     .map(t => `<span class="tag">${t}</span>`).join('');
+  $('q-content').innerHTML = SKEL;
 }
 
-// ── App 主逻辑 ─────────────────────────────────────────
+// ── 题目内容加载 ─────────────────────────────────────
+async function loadContent(sessionId) {
+  try {
+    const c = await req('GET', `/interview/session/${sessionId}/content`);
+    $('q-content').innerHTML = c.content || '<p>暂无描述</p>';
+    const lang    = $('lang').value;
+    const snippet = c.code_snippets?.find(s => s.langSlug === lang);
+    if (snippet && S.editor) S.editor.setValue(snippet.code);
+  } catch {
+    $('q-content').innerHTML =
+      '<p style="color:var(--ink-4)">题目内容加载失败，请刷新</p>';
+  }
+}
+
+// ── Markdown + LaTeX 渲染 ─────────────────────────────
+function md(text) {
+  const blocks = [];
+  text = text
+    .replace(/\$\$([\s\S]+?)\$\$/g, (_, m) => {
+      blocks.push({ display: true, src: m });
+      return `%%B${blocks.length - 1}%%`;
+    })
+    .replace(/\$([^\$\n]+?)\$/g, (_, m) => {
+      blocks.push({ display: false, src: m });
+      return `%%I${blocks.length - 1}%%`;
+    });
+
+  let html = text
+    .replace(/^## (.+)$/gm,    '<h2>$1</h2>')
+    .replace(/^### (.+)$/gm,   '<h3>$1</h3>')
+    .replace(/^\d+\.\s(.+)$/gm,'<li>$1</li>')
+    .replace(/^[-*]\s(.+)$/gm, '<li>$1</li>')
+    .replace(/`([^`\n]+)`/g,   '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n\n/g,          '</p><p>')
+    .replace(/\n(?!<)/g,       '<br>');
+
+  if (!html.startsWith('<')) html = '<p>' + html;
+  if (!html.endsWith('>'))   html += '</p>';
+
+  html = html.replace(/%%([BI])(\d+)%%/g, (_, type, idx) => {
+    const b = blocks[+idx];
+    if (!b) return '';
+    try {
+      return katex.renderToString(b.src, {
+        displayMode: type === 'B',
+        throwOnError: false,
+      });
+    } catch {
+      return type === 'B' ? `$$${b.src}$$` : `$${b.src}$`;
+    }
+  });
+
+  return html;
+}
+
+// ── 流式分析：逐字符打出效果 ─────────────────────────
+//
+// 原理：
+// SSE 推送的是按语义边界分批的 chunk（一句话/一段）
+// 前端收到 chunk 后，用队列逐字符打出，速度约 30ms/字
+// 这样就能实现"流水"效果，而不是一块一块出现
+//
+function streamAnalysis(sessionId) {
+  const body = $('analysis-body');
+
+  // 打字状态
+  let rawBuf   = '';    // 已收到的全部原始文本（累积）
+  let printBuf = '';    // 等待打出的字符队列
+  let printing = false;
+  let started  = false;
+  let done     = false;
+
+  const CHAR_INTERVAL = 18;  // ms/字符，越小越快
+
+  // 光标
+  const cursor = document.createElement('span');
+  cursor.className = 'type-cursor';
+
+  // 找到 body 内最后一个文本节点（递归，从右往左）
+  function lastTextNode(node) {
+    for (let i = node.childNodes.length - 1; i >= 0; i--) {
+      const c = node.childNodes[i];
+      if (c.nodeType === Node.TEXT_NODE && c.textContent.trim()) return c;
+      const found = lastTextNode(c);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  // 把光标插到最后一个文本节点的正后方（行内，不换行）
+  function placeCursor() {
+    const t = lastTextNode(body);
+    if (t && t.parentNode) {
+      t.parentNode.insertBefore(cursor, t.nextSibling);
+    } else {
+      body.appendChild(cursor);
+    }
+  }
+
+  // 逐字符打出函数
+  function typeNext() {
+    if (printBuf.length === 0) {
+      printing = false;
+      if (done) {
+        cursor.remove();
+        App.complete(sessionId);
+      }
+      return;
+    }
+
+    printing = true;
+    const ch  = printBuf[0];
+    printBuf  = printBuf.slice(1);
+    rawBuf   += ch;
+
+    const tmp = document.createElement('div');
+    tmp.innerHTML = md(rawBuf);
+    body.innerHTML = '';
+    while (tmp.firstChild) body.appendChild(tmp.firstChild);
+    placeCursor();
+
+    const pause = '。！？,.!?'.includes(ch) ? CHAR_INTERVAL * 4 : CHAR_INTERVAL;
+    setTimeout(typeNext, pause);
+  }
+
+  // SSE
+  const es = new EventSource(`${API}/analysis/stream/${sessionId}`);
+
+  es.onmessage = ({ data }) => {
+    const d = JSON.parse(data);
+
+    if (d.type === 'chunk') {
+      if (!started) {
+        body.innerHTML = '';
+        body.appendChild(cursor);
+        started = true;
+      }
+      // 把新 chunk 加入打字队列
+      printBuf += d.content;
+      if (!printing) typeNext();
+    }
+
+    if (d.type === 'done') {
+      es.close();
+      done = true;
+      // 如果打字队列已空，立刻完成；否则等打完再触发
+      if (!printing && printBuf.length === 0) {
+        cursor.remove();
+        App.complete(sessionId);
+      }
+    }
+
+    if (d.type === 'error') {
+      es.close();
+      cursor.remove();
+      printBuf = '';
+      printing = false;
+      if (!started)
+        body.innerHTML = `<p style="color:var(--red)">${d.message}</p>`;
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    cursor.remove();
+    printBuf = '';
+    printing = false;
+    if (!started)
+      body.innerHTML = '<p style="color:var(--ink-4)">分析服务暂时不可用</p>';
+  };
+}
+
+// ── 推荐题单 ─────────────────────────────────────────
+function renderRecs(recs) {
+  if (!recs?.length) return;
+  const label = { related: '相关练习', weakness: '薄弱点', new: '新知识点' };
+  $('rec-grid').innerHTML = recs.map(r => `
+    <div class="rec-item"
+         onclick="App.startWithQuestion(${r.id},'${r.title_slug}')">
+      <div class="rec-type">${label[r.recommend_type] || '推荐'}</div>
+      <div class="rec-title">${r.title}</div>
+      <div class="rec-why">${r.reason}</div>
+      <div class="rec-footer">
+        <span class="diff-pill ${r.difficulty}">${r.difficulty.toUpperCase()}</span>
+        <span class="rec-action">直接练习 →</span>
+      </div>
+    </div>`).join('');
+  $('r-recs').style.display = 'block';
+}
+
+// ── 用户栏 ───────────────────────────────────────────
+function _updateUserBar(username, profile) {
+  // 全局用户栏（非面试页）
+  const bar = $('user-bar');
+  if (!username) {
+    if (bar) bar.style.display = 'none';
+    return;
+  }
+  if (bar) {
+    bar.style.display = 'flex';
+    $('user-chip-name').textContent = username;
+    $('user-chip-stats').textContent = profile
+      ? `${profile.total_questions} 题` : '';
+  }
+  // 面试页内嵌用户按钮
+  const ib = $('interview-user-btn');
+  if (ib) ib.textContent = username;
+}
+
+// ── App ───────────────────────────────────────────────
 const App = {
 
   async init() {
     const { uid, uname } = store.load();
-
     if (uid) {
       try {
-        const p = await req('GET', `/users/${uid}`);
+        const p    = await req('GET', `/users/${uid}`);
         S.userId   = uid;
         S.username = uname;
-        $('nav-user').textContent = uname;
+        S.swapLeft = p.swap_remaining ?? 2;
+        _updateUserBar(uname, p);
         if (!p.calibration_done) { renderQuiz(); show('quiz'); }
         else this._interview();
         return;
-      } catch {
-        store.clear();
-      }
+      } catch { store.clear(); }
     }
 
     try {
-      const u = await req('POST', '/users/');
+      const u    = await req('POST', '/users/');
       S.userId   = u.user_id;
       S.username = u.username;
       store.save(u.user_id, u.username);
-      $('nav-user').textContent = u.username;
+      _updateUserBar(u.username, null);
       renderQuiz();
       show('quiz');
     } catch (e) {
@@ -264,11 +437,8 @@ const App = {
 
   async _interview() {
     show('interview');
-    // 重置题目面板
-    $('q-content').innerHTML = `
-      <div class="skel"></div><div class="skel sm"></div>
-      <div class="skel"></div><div class="skel sm"></div>`;
-    initEditor('python');
+    resetQuestionPanel();
+    initEditor($('lang')?.value || 'python');
 
     try {
       const r     = await req('POST', `/interview/${S.userId}/start`, {});
@@ -276,8 +446,7 @@ const App = {
       S.question  = r.question;
 
       renderQuestion(r.question, r.select_reason);
-      $('btn-swap').textContent = `换题 (${r.question.swap_remaining ?? 2})`;
-
+      updateSwapBtn(r.question.swap_remaining ?? S.swapLeft);
       startTimer(r.question.time_limit || 1800);
       loadContent(r.session_id);
     } catch (e) {
@@ -291,22 +460,45 @@ const App = {
   },
 
   async swap() {
-    const reason = prompt(
-      '换题原因（直接按确定跳过）\n① 太难了  ② 太简单了  ③ 做太多了  ④ 随便换'
-    ) || '就是想换';
+    if (S.swapLeft <= 0) {
+      toast('今日换题次数已用完');
+      return;
+    }
+
+    const _input = prompt(
+      '换题原因（取消=不换题，直接确定=随便换）\n① 太难了  ② 太简单了  ③ 做太多了  ④ 随便换'
+    );
+    if (_input === null) return;   // 用户点了取消
+    const reason = _input.trim() || '就是想换';
+
+    // 先备份当前题目，失败时恢复
+    const prevSession  = S.sessionId;
+    const prevQuestion = S.question;
+
+    resetQuestionPanel();
 
     try {
-      const r = await req('POST', `/interview/${S.userId}/swap`, {
+      const r     = await req('POST', `/interview/${S.userId}/swap`, {
         session_id: S.sessionId,
         reason,
       });
-      S.question = r.question;
+      S.sessionId = r.session_id;
+      S.question  = r.question;
+
       renderQuestion(r.question, r.select_reason);
-      $('btn-swap').textContent = `换题 (${r.swap_remaining})`;
-      // 换题后重新加载内容（注意 session 仍是旧的，后端需返回新 session_id）
-      $('q-content').innerHTML = '<div class="skel"></div><div class="skel sm"></div>';
+      updateSwapBtn(r.swap_remaining);
+      initEditor($('lang').value);
+      startTimer(r.question.time_limit || 1800);
+      loadContent(r.session_id);
       toast('已换题');
     } catch (e) {
+      // 失败：恢复旧题目
+      S.sessionId = prevSession;
+      S.question  = prevQuestion;
+      if (prevQuestion) {
+        renderQuestion(prevQuestion, null);
+        loadContent(prevSession);
+      }
       toast(e.message);
     }
   },
@@ -324,8 +516,8 @@ const App = {
     }
 
     show('result');
-    $('r-verdict').innerHTML = '<span class="verdict-text">判题中…</span>';
-    $('r-recs').style.display = 'none';
+    $('r-verdict').innerHTML    = '<span class="verdict-text">判题中…</span>';
+    $('r-recs').style.display   = 'none';
     $('analysis-body').innerHTML = `
       <div class="thinking">
         <span class="dot-pulse"></span>
@@ -344,8 +536,8 @@ const App = {
 
       const jr     = res.judge_result;
       const passed = jr.passed === jr.total && jr.status === 'Accepted';
-      const mins   = Math.floor(used / 60);
-      const secs   = used % 60;
+      const m      = Math.floor(used / 60);
+      const s      = used % 60;
 
       $('r-verdict').innerHTML = `
         <span class="verdict-text ${passed ? 'pass' : 'fail'}">
@@ -357,7 +549,7 @@ const App = {
             <span class="vs-label">测试用例</span>
           </div>
           <div class="vs">
-            <span class="vs-val">${mins}m ${secs}s</span>
+            <span class="vs-val">${m}m ${s}s</span>
             <span class="vs-label">用时</span>
           </div>
           <div class="vs">
@@ -369,7 +561,8 @@ const App = {
       streamAnalysis(S.sessionId);
 
     } catch (e) {
-      $('r-verdict').innerHTML = `<span class="verdict-text fail">提交失败</span>`;
+      $('r-verdict').innerHTML =
+        `<span class="verdict-text fail">提交失败</span>`;
       toast(`错误：${e.message}`);
     }
   },
@@ -383,12 +576,110 @@ const App = {
     }
   },
 
+  async startWithQuestion(questionId, titleSlug) {
+    clearInterval(S.timerId);
+    show('interview');
+    resetQuestionPanel();
+    initEditor($('lang')?.value || 'python');
+    toast('正在加载题目…');
+
+    try {
+      const r     = await req('POST', `/interview/${S.userId}/start`,
+                              { preferred_question_id: questionId });
+      S.sessionId = r.session_id;
+      S.question  = r.question;
+
+      renderQuestion(r.question, r.select_reason);
+      updateSwapBtn(r.question.swap_remaining ?? S.swapLeft);
+      startTimer(r.question.time_limit || 1800);
+      loadContent(r.session_id);
+    } catch (e) {
+      toast(`加载失败：${e.message}`);
+    }
+  },
+
   again() {
     clearInterval(S.timerId);
     S.sessionId = null;
     this._interview();
   },
+
+  async showStats() {
+    if (!S.userId) return;
+    try {
+      const p = await req('GET', `/users/${S.userId}`);
+
+      // 用户名
+      $('modal-username').textContent = S.username;
+
+      // 顶部统计数字
+      const solved = p.solved_ids?.length ?? 0;
+      const failed = p.failed_ids?.length ?? 0;
+      $('modal-stats').innerHTML = `
+        <div class="mstat">
+          <span class="mstat-val">${p.total_questions}</span>
+          <span class="mstat-label">总题数</span>
+        </div>
+        <div class="mstat">
+          <span class="mstat-val">${solved}</span>
+          <span class="mstat-label">已解决</span>
+        </div>
+        <div class="mstat">
+          <span class="mstat-val">${failed}</span>
+          <span class="mstat-label">待攻克</span>
+        </div>`;
+
+      // 技能进度条
+      const skills = p.skills || {};
+      const sorted = Object.entries(skills)
+        .filter(([, v]) => v.confidence > 0.2)
+        .sort(([, a], [, b]) => b.level - a.level);
+
+      const barsHtml = sorted.map(([tag, v]) => {
+        const pct   = Math.round(v.level * 100);
+        const cls   = v.level < 0.4 ? 'low' : v.level < 0.7 ? 'mid' : 'high';
+        return `
+          <div class="skill-bar-row">
+            <span class="skill-bar-name">${tag}</span>
+            <div class="skill-bar-track">
+              <div class="skill-bar-fill ${cls}" style="width:${pct}%"></div>
+            </div>
+            <span class="skill-bar-level">${pct}%</span>
+          </div>`;
+      }).join('');
+
+      $('modal-skills').innerHTML = `
+        <div class="modal-skills-title">技能画像</div>
+        ${barsHtml || '<p style="color:var(--ink-4);font-size:13px">完成更多题目后显示</p>'}`;
+
+      // 更新 user-bar 上的统计
+      _updateUserBar(S.username, p);
+
+      $('stats-modal').style.display = 'flex';
+    } catch (e) {
+      toast(`加载统计失败：${e.message}`);
+    }
+  },
+
+  closeStats() {
+    $('stats-modal').style.display = 'none';
+  },
+
+  // 清除当前用户，重新开始（新用户身份）
+  clearUser() {
+    if (!confirm('清除当前用户画像？所有进度将丢失，将以新用户身份重新开始。')) return;
+    clearInterval(S.timerId);
+    store.clear();
+    S.userId    = null;
+    S.username  = null;
+    S.sessionId = null;
+    S.question  = null;
+    S.swapLeft  = 2;
+    _updateUserBar(null, null);
+    show('home');
+    toast('已清除，以新用户身份重新开始');
+  },
 };
 
-// ── 启动 ───────────────────────────────────────────────
+// ── 启动 ─────────────────────────────────────────────
 show('home');
