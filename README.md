@@ -172,7 +172,7 @@ JSON提取 / 类型强转"]
 **③ 多环境 LLM 路由**
 ```bash
 # 本地 Ollama → /api/chat 原生接口（think=false 关闭思考模式）
-# 云端 QWen / DeepSeek → /v1/chat/completions（OpenAI 兼容）
+# 云端 QWen / DeepSeek → /v1/chat/completions（OpenAI 兼容，开发阶段暂未测试）
 # 切换只改 .env，代码零改动
 ```
 
@@ -309,6 +309,10 @@ python scripts/build_vector_index/build_index.py
 
 # 生成测试用例
 python scripts/build_vector_index/gen_test_cases.py
+
+# 检查数据完整性并清理脏数据
+python scripts/check_data_integrity.py
+python scripts/check_data_integrity.py --fix
 ```
 
 ### 第六步：启动服务
@@ -388,13 +392,6 @@ python scripts/build_vector_index/gen_test_cases.py
 | **冷启动精度** | 问卷自评到初始 level 的映射较粗糙 | 用多道标定题做 IRT 冷启动 |
 | **多样性** | 只过滤已解决题目，不防止知识点长期偏向 | 引入长期多样性约束 |
 
-### 测试覆盖
-
-| 问题 | 现状 |
-|------|------|
-| **集成测试** | 只有单元测试，无端到端测试 |
-| **判题测试** | 判题逻辑无法在 CI 中自动验证（依赖本地 Python 环境）|
-
 ---
 
 ## Roadmap
@@ -404,8 +401,8 @@ python scripts/build_vector_index/gen_test_cases.py
 
 - [ ] **答题页面优化**：增加运行按钮，用户可以先测试代码再提交
 - [ ] **失败用例展示**：答错时展示具体失败的测试用例（输入/期望/实际）
-- [ ] **题库扩充**：从 127 道扩展到 300+ 道，覆盖更多 NeetCode 题目
-- [ ] **前端优化**：响应式布局完善，移动端支持
+- [ ] **题库扩充**：从 101 道扩展到 300+ 道，覆盖更多 LeetCode 题目
+- [ ] **前端优化**：响应式布局完善
 
 ### 中期（v0.3）
 

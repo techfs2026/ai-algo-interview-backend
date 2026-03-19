@@ -36,6 +36,47 @@ const S = {
 // ── 工具 ─────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
+// ── 加载弹窗 ──────────────────────────────────────────
+// 文案按时间轮转，让等待不那么无聊
+const LOADING_MSGS = {
+  select: [
+    { icon: '🧠', text: '正在分析你的画像',   sub: '15 个维度，逐一比对中…' },
+    { icon: '🔍', text: '向量空间检索中',      sub: '在 100+ 道题里寻找命中注定的那道' },
+    { icon: '⚖️', text: '四维重排进行中',      sub: '多样性 × 能力匹配 × 题目质量 × 校准价值' },
+    { icon: '🎯', text: '即将选出最适合你的题', sub: '差一点点，稳住' },
+  ],
+  swap: [
+    { icon: '🔄', text: '换题中',             sub: '这次一定更合你意' },
+    { icon: '🎲', text: 'AI 重新出牌',         sub: '从 100+ 道题里重新挑' },
+    { icon: '✨', text: '新题目即将登场',       sub: '已避开你做过的所有题' },
+  ],
+};
+
+let _loadingTimer  = null;
+let _loadingIndex  = 0;
+
+function showLoading(scene = 'select') {
+  const msgs = LOADING_MSGS[scene] || LOADING_MSGS.select;
+  _loadingIndex = 0;
+
+  function tick() {
+    const m = msgs[_loadingIndex % msgs.length];
+    $('loading-icon').textContent = m.icon;
+    $('loading-text').textContent = m.text;
+    $('loading-sub').textContent  = m.sub;
+    _loadingIndex++;
+  }
+
+  tick();
+  $('loading-modal').style.display = 'flex';
+  _loadingTimer = setInterval(tick, 2200);
+}
+
+function hideLoading() {
+  clearInterval(_loadingTimer);
+  $('loading-modal').style.display = 'none';
+}
+
 function show(name) {
   document.querySelectorAll('.pg').forEach(p =>
     p.classList.toggle('on', p.id === `pg-${name}`)
@@ -439,17 +480,20 @@ const App = {
     show('interview');
     resetQuestionPanel();
     initEditor($('lang')?.value || 'python');
+    showLoading('select');
 
     try {
       const r     = await req('POST', `/interview/${S.userId}/start`, {});
       S.sessionId = r.session_id;
       S.question  = r.question;
 
+      hideLoading();
       renderQuestion(r.question, r.select_reason);
       updateSwapBtn(r.question.swap_remaining ?? S.swapLeft);
       startTimer(r.question.time_limit || 1800);
       loadContent(r.session_id);
     } catch (e) {
+      hideLoading();
       toast(`选题失败：${e.message}`);
     }
   },
@@ -476,6 +520,7 @@ const App = {
     const prevQuestion = S.question;
 
     resetQuestionPanel();
+    showLoading('swap');
 
     try {
       const r     = await req('POST', `/interview/${S.userId}/swap`, {
@@ -485,6 +530,7 @@ const App = {
       S.sessionId = r.session_id;
       S.question  = r.question;
 
+      hideLoading();
       renderQuestion(r.question, r.select_reason);
       updateSwapBtn(r.swap_remaining);
       initEditor($('lang').value);
@@ -492,6 +538,7 @@ const App = {
       loadContent(r.session_id);
       toast('已换题');
     } catch (e) {
+      hideLoading();
       // 失败：恢复旧题目
       S.sessionId = prevSession;
       S.question  = prevQuestion;
@@ -581,7 +628,7 @@ const App = {
     show('interview');
     resetQuestionPanel();
     initEditor($('lang')?.value || 'python');
-    toast('正在加载题目…');
+    showLoading('select');
 
     try {
       const r     = await req('POST', `/interview/${S.userId}/start`,
@@ -589,11 +636,13 @@ const App = {
       S.sessionId = r.session_id;
       S.question  = r.question;
 
+      hideLoading();
       renderQuestion(r.question, r.select_reason);
       updateSwapBtn(r.question.swap_remaining ?? S.swapLeft);
       startTimer(r.question.time_limit || 1800);
       loadContent(r.session_id);
     } catch (e) {
+      hideLoading();
       toast(`加载失败：${e.message}`);
     }
   },
@@ -608,60 +657,63 @@ const App = {
     if (!S.userId) return;
     $('stats-modal').style.display = 'flex';
     $('modal-username').textContent = S.username;
-    $('modal-stats').innerHTML = '<div style="padding:20px;color:var(--ink-4);font-size:13px">加载中…</div>';
-    $('modal-skills').innerHTML = '';
+    $('modal-stat-row').innerHTML  = '<div style="padding:16px;color:var(--ink-4);font-size:12px;font-family:var(--mono)">加载中…</div>';
+    $('modal-skill-list').innerHTML = '';
 
     try {
-      // 调后端统计接口，数据来自数据库而不是前端状态
       const stats = await req('GET', `/users/${S.userId}/stats`);
+      // 只更新 chip 上的题数，不调 _updateUserBar（避免面试页 user-bar 意外显示）
+      const chipStats = $('user-chip-stats');
+      if (chipStats) chipStats.textContent = `${stats.total_questions} 题`;
 
-      // 顶部统计数字
-      const passRatePct = Math.round((stats.pass_rate || 0) * 100);
-      const avgMins     = Math.floor((stats.avg_time_secs || 0) / 60);
-      const avgSecs     = (stats.avg_time_secs || 0) % 60;
-      $('modal-stats').innerHTML = `
-        <div class="mstat">
-          <span class="mstat-val">${stats.total_questions}</span>
-          <span class="mstat-label">总题数</span>
+      // 统计数字（2×2 格子）
+      const pct  = Math.round((stats.pass_rate || 0) * 100);
+      const m    = Math.floor((stats.avg_time_secs || 0) / 60);
+      const s2   = (stats.avg_time_secs || 0) % 60;
+      const tStr = stats.avg_time_secs ? `${m}m${s2}s` : '—';
+      $('modal-stat-row').innerHTML = `
+        <div class="modal-stat-cell">
+          <span class="mstat-v">${stats.total_questions}</span>
+          <span class="mstat-l">总题数</span>
         </div>
-        <div class="mstat">
-          <span class="mstat-val">${stats.solved_count}</span>
-          <span class="mstat-label">已解决</span>
+        <div class="modal-stat-cell">
+          <span class="mstat-v green">${stats.solved_count}</span>
+          <span class="mstat-l">已解决</span>
         </div>
-        <div class="mstat">
-          <span class="mstat-val">${passRatePct}%</span>
-          <span class="mstat-label">通过率</span>
+        <div class="modal-stat-cell">
+          <span class="mstat-v ${pct >= 60 ? 'green' : 'amber'}">${pct}%</span>
+          <span class="mstat-l">通过率</span>
         </div>
-        <div class="mstat">
-          <span class="mstat-val">${avgMins}m${avgSecs}s</span>
-          <span class="mstat-label">平均用时</span>
+        <div class="modal-stat-cell">
+          <span class="mstat-v">${tStr}</span>
+          <span class="mstat-l">平均用时</span>
         </div>`;
 
-      // 技能画像进度条（数据来自后端排序）
-      const skills    = stats.skills || [];
-      const filtered  = skills.filter(s => s.confidence > 0.2);
-      const barsHtml  = filtered.map(s => {
-        const pct = Math.round(s.level * 100);
+      // 知识点列表（只展示 15 个核心知识点）
+      const skills = (stats.skills || []).filter(s => TAGS.includes(s.tag));
+      $('modal-skill-list').innerHTML = skills.length ? skills.map(s => {
+        const p   = Math.round(s.level * 100);
         const cls = s.level < 0.4 ? 'low' : s.level < 0.7 ? 'mid' : 'high';
-        const cnt = s.question_count > 0 ? `<span class="skill-bar-count">${s.question_count}题</span>` : '';
         return `
-          <div class="skill-bar-row">
-            <span class="skill-bar-name">${s.tag}</span>
-            <div class="skill-bar-track">
-              <div class="skill-bar-fill ${cls}" style="width:${pct}%"></div>
+          <div class="mskill-row">
+            <span class="mskill-name">${s.tag}</span>
+            <div class="mskill-track">
+              <div class="mskill-fill ${cls}" style="width:${p}%"></div>
             </div>
-            <span class="skill-bar-level">${pct}%</span>
-            ${cnt}
+            <span class="mskill-pct">${p}%</span>
+            <span class="mskill-cnt">${s.question_count}题</span>
           </div>`;
-      }).join('');
+      }).join('') : '<p style="color:var(--ink-4);font-size:12px;font-family:var(--mono)">完成更多题目后显示</p>';
 
-      $('modal-skills').innerHTML = `
-        <div class="modal-skills-title">技能画像</div>
-        ${barsHtml || '<p style="color:var(--ink-4);font-size:13px">完成更多题目后显示</p>'}`;
+      // 雷达图（skills 已过滤为 15 个核心 tag）
+      requestAnimationFrame(() => {
+        const canvas = $('modal-radar');
+        if (canvas && skills.length) _drawRadar(canvas, skills);
+      });
 
     } catch (e) {
-      $('modal-stats').innerHTML = `<p style="color:var(--red);padding:16px">${e.message}</p>`;
-      toast(`加载统计失败：${e.message}`);
+      $('modal-stat-row').innerHTML = `<p style="color:var(--red);padding:16px;font-size:13px">${e.message}</p>`;
+      toast(`加载失败：${e.message}`);
     }
   },
 
@@ -684,6 +736,81 @@ const App = {
     toast('已清除，以新用户身份重新开始');
   },
 };
+
+// ── 雷达图 ───────────────────────────────────────────
+function _drawRadar(canvas, skills) {
+  const ORDER = [
+    '数组','字符串','哈希表','链表','栈',
+    '队列','二叉树','图','动态规划','回溯',
+    '贪心','二分查找','双指针','滑动窗口','排序',
+  ];
+  const map  = Object.fromEntries(skills.map(s => [s.tag, s]));
+  const data = ORDER.filter(t => map[t]).map(t => map[t]);
+  const n    = data.length;
+  if (!n) return;
+
+  const W = 260, H = 260, cx = W / 2, cy = H / 2, R = 100;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  function pt(i, r) {
+    const a = (Math.PI * 2 * i / n) - Math.PI / 2;
+    return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  }
+
+  // 网格
+  for (let lay = 1; lay <= 5; lay++) {
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const [x, y] = pt(i, R * lay / 5);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = '#e8e4de';
+    ctx.lineWidth   = 1;
+    ctx.stroke();
+  }
+
+  // 轴线
+  for (let i = 0; i < n; i++) {
+    const [x, y] = pt(i, R);
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y);
+    ctx.strokeStyle = '#e8e4de'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  // 数据面
+  ctx.beginPath();
+  data.forEach((s, i) => {
+    const [x, y] = pt(i, R * s.level);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.fillStyle   = 'rgba(22,163,74,0.13)';
+  ctx.strokeStyle = '#16a34a';
+  ctx.lineWidth   = 1.5;
+  ctx.fill(); ctx.stroke();
+
+  // 数据点
+  data.forEach((s, i) => {
+    const [x, y] = pt(i, R * s.level);
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#16a34a'; ctx.fill();
+  });
+
+  // 标签
+  ctx.font = `10px 'IBM Plex Mono', monospace`;
+  ctx.textAlign = 'center';
+  data.forEach((s, i) => {
+    const [lx, ly] = pt(i, R + 18);
+    ctx.fillStyle = s.level < 0.4 ? '#dc2626' : s.level < 0.7 ? '#b45309' : '#16a34a';
+    ctx.fillText(s.tag, lx, ly + 3);
+  });
+}
 
 // ── 启动 ─────────────────────────────────────────────
 show('home');

@@ -5,10 +5,9 @@ LeetCode API 返回英文标签，系统内部使用中文知识点。
 此文件是唯一的映射来源，所有转换都通过这里。
 """
 
-# 英文 → 中文映射
-# 覆盖 15 个核心知识点 + 常见 LeetCode 标签变体
+# 英文 → 中文映射（只包含 15 个核心知识点 + LeetCode 常见变体写法）
+# 不在此表里的 tag 一律丢弃，不存入数据库
 EN_TO_ZH: dict[str, str] = {
-    # 核心15个知识点
     "Array":              "数组",
     "String":             "字符串",
     "Hash Table":         "哈希表",
@@ -16,7 +15,7 @@ EN_TO_ZH: dict[str, str] = {
     "Stack":              "栈",
     "Queue":              "队列",
     "Binary Tree":        "二叉树",
-    "Tree":               "二叉树",    # LeetCode 有时用 Tree
+    "Tree":               "二叉树",   # LeetCode 有时写 Tree
     "Graph":              "图",
     "Dynamic Programming":"动态规划",
     "Backtracking":       "回溯",
@@ -25,40 +24,7 @@ EN_TO_ZH: dict[str, str] = {
     "Two Pointers":       "双指针",
     "Sliding Window":     "滑动窗口",
     "Sorting":            "排序",
-
-    # 其他常见标签（保留英文，不映射到核心知识点）
-    "Math":               "数学",
-    "Bit Manipulation":   "位运算",
-    "Recursion":          "递归",
-    "Depth-First Search": "深度优先搜索",
-    "Breadth-First Search":"广度优先搜索",
-    "Heap (Priority Queue)":"堆",
-    "Priority Queue":     "堆",
-    "Trie":               "前缀树",
-    "Union Find":         "并查集",
-    "Monotonic Stack":    "单调栈",
-    "Divide and Conquer": "分治",
-    "Simulation":         "模拟",
-    "Design":             "设计",
-    "Matrix":             "矩阵",
-    "Number Theory":      "数论",
-    "Memoization":        "记忆化搜索",
-    "Counting":           "计数",
-    "Prefix Sum":         "前缀和",
-    "Binary Search Tree": "二叉搜索树",
-    "Segment Tree":       "线段树",
-    "Binary Indexed Tree":"树状数组",
-    "Interactive":        "交互",
-    "Randomized":         "随机化",
-    "Game Theory":        "博弈论",
-    "Geometry":           "几何",
-    "Topological Sort":   "拓扑排序",
-    "Shortest Path":      "最短路径",
-    "Minimum Spanning Tree":"最小生成树",
 }
-
-# 中文 → 英文（反查，用于调试）
-ZH_TO_EN: dict[str, str] = {v: k for k, v in EN_TO_ZH.items()}
 
 # 15个核心知识点（中文），用于用户画像
 CORE_TAGS_ZH = [
@@ -68,14 +34,24 @@ CORE_TAGS_ZH = [
 ]
 
 
-def to_zh(en_tag: str) -> str:
-    """英文标签转中文，未知标签保留原文"""
-    return EN_TO_ZH.get(en_tag, en_tag)
+def to_zh(en_tag: str) -> str | None:
+    """英文标签转中文，不在核心列表里的返回 None"""
+    return EN_TO_ZH.get(en_tag)
 
 
 def tags_to_zh(en_tags: list[str]) -> list[str]:
-    """批量转换标签列表"""
-    return [to_zh(t) for t in en_tags]
+    """
+    批量转换标签：英文 → 中文，同时过滤掉非核心 tag。
+    不在 15 个核心知识点里的 tag 直接丢弃，保证数据干净。
+    """
+    result = []
+    seen   = set()   # 去重（Tree 和 Binary Tree 都映射到"二叉树"）
+    for en in en_tags:
+        zh = EN_TO_ZH.get(en)   # 不在映射表里的返回 None
+        if zh and zh not in seen:
+            result.append(zh)
+            seen.add(zh)
+    return result
 
 
 def is_core_tag(zh_tag: str) -> bool:

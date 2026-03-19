@@ -751,9 +751,9 @@ h1 em { font-style: italic; color: var(--ink-3); }
 .modal-box {
   background: var(--paper);
   border-radius: var(--r4);
-  width: 440px;
-  max-width: 90vw;
-  max-height: 80vh;
+  width: 760px;
+  max-width: 95vw;
+  max-height: 88vh;
   overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0,0,0,.2);
   animation: up .2s ease;
@@ -894,3 +894,177 @@ h1 em { font-style: italic; color: var(--ink-3); }
 
 /* ── 统计弹窗四列布局 ───────────────────────────────── */
 .modal-stats .mstat:nth-child(4) { border-right: none; }
+
+/* ── 统计弹窗升级：雷达图布局 ───────────────────── */
+.modal-body {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 0;
+  min-height: 360px;
+}
+.modal-radar-col {
+  border-right: 1px solid var(--line);
+  padding: 8px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.modal-radar-col canvas {
+  max-width: 100%;
+}
+.modal-detail-col {
+  display: flex;
+  flex-direction: column;
+}
+.modal-stat-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  border-bottom: 1px solid var(--line);
+}
+.modal-stat-cell {
+  padding: 14px 18px;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.modal-stat-cell:nth-child(2) { border-right: none; }
+.modal-stat-cell:nth-child(3) { border-bottom: none; border-right: 1px solid var(--line); }
+.modal-stat-cell:nth-child(4) { border-bottom: none; border-right: none; }
+.mstat-v {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1;
+}
+.mstat-v.green { color: var(--green); }
+.mstat-v.amber { color: #b45309; }
+.mstat-l {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.modal-skill-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.mskill-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mskill-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  min-width: 56px;
+}
+.mskill-track {
+  flex: 1;
+  height: 4px;
+  background: var(--paper-3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.mskill-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width .5s ease;
+}
+.mskill-fill.low  { background: #f87171; }
+.mskill-fill.mid  { background: #fbbf24; }
+.mskill-fill.high { background: #34d399; }
+.mskill-pct {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  min-width: 28px;
+  text-align: right;
+}
+.mskill-cnt {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  min-width: 24px;
+  text-align: right;
+}
+@media (max-width: 600px) {
+  .modal-body { grid-template-columns: 1fr; }
+  .modal-radar-col { border-right: none; border-bottom: 1px solid var(--line); }
+}
+
+/* ── 选题加载弹窗 ────────────────────────────────── */
+.loading-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(10,10,10,.45);
+  backdrop-filter: blur(3px);
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.loading-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 36px 44px;
+  min-width: 280px;
+  text-align: center;
+  box-shadow: 0 24px 64px rgba(0,0,0,.18);
+  animation: up .2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.loading-icon {
+  font-size: 32px;
+  animation: spin-slow 2s linear infinite;
+  display: inline-block;
+  line-height: 1;
+}
+@keyframes spin-slow {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.loading-text {
+  font-family: var(--serif);
+  font-size: 18px;
+  color: var(--ink);
+  letter-spacing: -.2px;
+}
+.loading-sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-4);
+  line-height: 1.6;
+  min-height: 18px;
+}
+.loading-bar {
+  width: 160px;
+  height: 3px;
+  background: var(--paper-3);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.loading-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--ink);
+  border-radius: 2px;
+  transition: width .4s ease;
+  animation: indeterminate 1.6s ease-in-out infinite;
+}
+@keyframes indeterminate {
+  0%   { transform: translateX(-100%); width: 60%; }
+  100% { transform: translateX(200%);  width: 60%; }
+}
