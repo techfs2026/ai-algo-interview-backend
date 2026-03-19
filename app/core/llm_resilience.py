@@ -324,7 +324,11 @@ def _get_missing_fields(
 
 
 async def _record_metrics(metrics: LLMCallMetrics) -> None:
-    """记录埋点数据（后续接入监控系统）"""
+    """
+    记录埋点数据：
+    1. 打日志（同步，始终执行）
+    2. 异步写入数据库（不阻塞主流程，写失败只报警不崩）
+    """
     level = logging.WARNING if metrics.fallback_used else logging.INFO
     logger.log(
         level,
@@ -335,3 +339,28 @@ async def _record_metrics(metrics: LLMCallMetrics) -> None:
         f"latency={metrics.total_latency:.2f}s "
         f"reason={metrics.failure_reason or 'ok'}"
     )
+    # 异步写库，失败不影响主流程
+    asyncio.create_task(_persist_metrics(metrics))
+
+
+async def _persist_metrics(metrics: LLMCallMetrics) -> None:
+    """将埋点数据持久化到数据库"""
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.models.models import LLMCallLog
+
+        async with AsyncSessionLocal() as session:
+            log = LLMCallLog(
+                scene=metrics.scene,
+                model=settings.llm_model,
+                attempts=metrics.attempts,
+                repair_success=metrics.repair_success,
+                fallback_used=metrics.fallback_used,
+                latency_ms=int(metrics.total_latency * 1000),
+                tokens_used=metrics.tokens_used,
+                failure_reason=metrics.failure_reason or None,
+            )
+            session.add(log)
+            await session.commit()
+    except Exception as e:
+        logger.warning(f"[LLM] 埋点写库失败（不影响业务）: {e}")

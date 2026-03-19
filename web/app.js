@@ -606,45 +606,52 @@ const App = {
 
   async showStats() {
     if (!S.userId) return;
-    try {
-      const p = await req('GET', `/users/${S.userId}`);
+    $('stats-modal').style.display = 'flex';
+    $('modal-username').textContent = S.username;
+    $('modal-stats').innerHTML = '<div style="padding:20px;color:var(--ink-4);font-size:13px">加载中…</div>';
+    $('modal-skills').innerHTML = '';
 
-      // 用户名
-      $('modal-username').textContent = S.username;
+    try {
+      // 调后端统计接口，数据来自数据库而不是前端状态
+      const stats = await req('GET', `/users/${S.userId}/stats`);
 
       // 顶部统计数字
-      const solved = p.solved_ids?.length ?? 0;
-      const failed = p.failed_ids?.length ?? 0;
+      const passRatePct = Math.round((stats.pass_rate || 0) * 100);
+      const avgMins     = Math.floor((stats.avg_time_secs || 0) / 60);
+      const avgSecs     = (stats.avg_time_secs || 0) % 60;
       $('modal-stats').innerHTML = `
         <div class="mstat">
-          <span class="mstat-val">${p.total_questions}</span>
+          <span class="mstat-val">${stats.total_questions}</span>
           <span class="mstat-label">总题数</span>
         </div>
         <div class="mstat">
-          <span class="mstat-val">${solved}</span>
+          <span class="mstat-val">${stats.solved_count}</span>
           <span class="mstat-label">已解决</span>
         </div>
         <div class="mstat">
-          <span class="mstat-val">${failed}</span>
-          <span class="mstat-label">待攻克</span>
+          <span class="mstat-val">${passRatePct}%</span>
+          <span class="mstat-label">通过率</span>
+        </div>
+        <div class="mstat">
+          <span class="mstat-val">${avgMins}m${avgSecs}s</span>
+          <span class="mstat-label">平均用时</span>
         </div>`;
 
-      // 技能进度条
-      const skills = p.skills || {};
-      const sorted = Object.entries(skills)
-        .filter(([, v]) => v.confidence > 0.2)
-        .sort(([, a], [, b]) => b.level - a.level);
-
-      const barsHtml = sorted.map(([tag, v]) => {
-        const pct   = Math.round(v.level * 100);
-        const cls   = v.level < 0.4 ? 'low' : v.level < 0.7 ? 'mid' : 'high';
+      // 技能画像进度条（数据来自后端排序）
+      const skills    = stats.skills || [];
+      const filtered  = skills.filter(s => s.confidence > 0.2);
+      const barsHtml  = filtered.map(s => {
+        const pct = Math.round(s.level * 100);
+        const cls = s.level < 0.4 ? 'low' : s.level < 0.7 ? 'mid' : 'high';
+        const cnt = s.question_count > 0 ? `<span class="skill-bar-count">${s.question_count}题</span>` : '';
         return `
           <div class="skill-bar-row">
-            <span class="skill-bar-name">${tag}</span>
+            <span class="skill-bar-name">${s.tag}</span>
             <div class="skill-bar-track">
               <div class="skill-bar-fill ${cls}" style="width:${pct}%"></div>
             </div>
             <span class="skill-bar-level">${pct}%</span>
+            ${cnt}
           </div>`;
       }).join('');
 
@@ -652,11 +659,8 @@ const App = {
         <div class="modal-skills-title">技能画像</div>
         ${barsHtml || '<p style="color:var(--ink-4);font-size:13px">完成更多题目后显示</p>'}`;
 
-      // 更新 user-bar 上的统计
-      _updateUserBar(S.username, p);
-
-      $('stats-modal').style.display = 'flex';
     } catch (e) {
+      $('modal-stats').innerHTML = `<p style="color:var(--red);padding:16px">${e.message}</p>`;
       toast(`加载统计失败：${e.message}`);
     }
   },

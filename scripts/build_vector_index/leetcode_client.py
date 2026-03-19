@@ -140,15 +140,20 @@ def parse_ac_rate(stats_str: str) -> float:
 def parse_question_meta(raw: dict) -> dict:
     """
     从原始 API 数据提取元数据（用于建库和数据库存储）。
-    内容字段（content、codeSnippets）单独保留，用于答题界面。
+    tags 在这里统一转成中文，后续所有逻辑都用中文 tag。
     """
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from app.core.tag_mapping import tags_to_zh
+
+    en_tags = [t["name"] for t in raw.get("topicTags", [])]
     return {
         "id":          int(raw["questionId"]),
         "title":       raw["title"],
         "title_slug":  raw["titleSlug"],
         "difficulty":  raw["difficulty"].lower(),
         "is_paid":     raw.get("isPaidOnly", False),
-        "tags":        [t["name"] for t in raw.get("topicTags", [])],
+        "tags":        tags_to_zh(en_tags),   # ← 存中文 tag
         "ac_rate":     parse_ac_rate(raw.get("stats", "{}")),
         # 内容字段（缓存用）
         "content":        raw.get("content", ""),

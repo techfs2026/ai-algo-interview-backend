@@ -883,3 +883,14 @@ h1 em { font-style: italic; color: var(--ink-3); }
   background: var(--line-2);
   margin: 0 4px;
 }
+/* ── 技能条题目数量标注 ──────────────────────────────── */
+.skill-bar-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  min-width: 30px;
+  text-align: right;
+}
+
+/* ── 统计弹窗四列布局 ───────────────────────────────── */
+.modal-stats .mstat:nth-child(4) { border-right: none; }

@@ -394,26 +394,12 @@ ai-algo-interview/
 
 ---
 
-## 贡献指南
-
-欢迎提交 Issue 和 PR！
-
-```bash
-# 开发分支命名规范
-feat/xxx    新功能
-fix/xxx     Bug 修复
-docs/xxx    文档更新
-refactor/xxx 重构
-```
-
----
-
 <div align="center">
 
 **如果这个项目对你有帮助，欢迎点个 ⭐ Star！**
 
 你的 Star 是我继续维护的动力 🙏
 
-[![Star History Chart](https://img.shields.io/github/stars/techfs2026/ai-algo-interview?style=social)](https://github.com/techfs2026/ai-algo-interview-backend)
+[![Star History Chart](https://img.shields.io/github/stars/techfs2026/ai-algo-interview-backend?style=social)](https://github.com/techfs2026/ai-algo-interview-backend)
 
 </div>

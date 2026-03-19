@@ -10,7 +10,7 @@ from alembic import context
 # 导入所有模型，让 Alembic 能检测到表结构
 from app.core.config import get_settings
 from app.core.database import Base
-from app.models.models import UserProfile, Question, InterviewSession, RecommendationLog
+from app.models.models import *
 
 config   = context.config
 settings = get_settings()

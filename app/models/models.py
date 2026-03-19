@@ -102,3 +102,21 @@ class RecommendationLog(Base):
     was_clicked:    Mapped[bool]         = mapped_column(Boolean, default=False)
     was_completed:  Mapped[bool]         = mapped_column(Boolean, default=False)
     created_at:     Mapped[datetime]     = mapped_column(DateTime, default=datetime.utcnow)
+
+class LLMCallLog(Base):
+    """LLM 调用日志 - 可观测性核心表"""
+    __tablename__  = "llm_call_logs"
+    __table_args__ = {"extend_existing": True}
+
+    id:             Mapped[int]          = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scene:          Mapped[str]          = mapped_column(String(50), nullable=False)
+    # select / analyze / feedback / questionnaire
+    model:          Mapped[str]          = mapped_column(String(100), nullable=False)
+    attempts:       Mapped[int]          = mapped_column(Integer, default=1)
+    repair_success: Mapped[bool]         = mapped_column(Boolean, default=False)
+    fallback_used:  Mapped[bool]         = mapped_column(Boolean, default=False)
+    latency_ms:     Mapped[int]          = mapped_column(Integer, default=0)
+    tokens_used:    Mapped[int]          = mapped_column(Integer, default=0)
+    failure_reason: Mapped[str | None]   = mapped_column(String(200), nullable=True)
+    # ok / timeout / json_parse_error / schema_error / exception
+    created_at:     Mapped[datetime]     = mapped_column(DateTime, default=datetime.utcnow)

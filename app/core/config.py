@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     embedding_model:      str = "nomic-embed-text"
     embedding_vector_size:int = 768   # 本地Ollama=768，线上QWen/OpenAI=1536
 
+    judge_provider: str = "subprocess"
     # Judge0
     judge0_url:     str = ""
     judge0_api_key: str = ""

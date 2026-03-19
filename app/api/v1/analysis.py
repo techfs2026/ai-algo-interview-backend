@@ -41,16 +41,10 @@ async def submit_code(
             detail="判题服务暂时不可用，请确认 Judge0 已启动（docker compose up -d）"
         )
 
-    # 获取题目内容（含示例）
-    from app.services.question_service import QuestionService
-    q_service = QuestionService(db)
-    content   = await q_service.get_content(question.title_slug)
-
-    # 获取或解析测试用例
+    # 从数据库读取测试用例（只读数据库，不做临时解析）
     test_cases = await judge_service.get_test_cases(
         question_id=question.id,
         db=db,
-        content=content,
     )
 
     # 执行判题

@@ -1,30 +1,23 @@
 """
 测试用例生成脚本
 
-为已入库的题目生成测试用例，存入 test_cases 表。
-测试用例来源：
-1. 优先从 LeetCode API 的题目 HTML 解析示例（免费，准确）
-2. 解析失败时用 LLM 补充生成
+从 LeetCode 题目 HTML 解析 Input/Output 示例，存入 test_cases 表。
+
+设计原则：只用 HTML 解析，不用 LLM 生成。
+解析失败直接跳过，保证数据干净，宁缺毋滥。
 
 用法：
-    # 为所有已入库题目生成测试用例
     python scripts/gen_test_cases.py
-
-    # 只处理 easy 题
     python scripts/gen_test_cases.py --difficulty easy
-
-    # 限制数量（测试用）
     python scripts/gen_test_cases.py --limit 10
-
-    # 强制重新生成（覆盖已有的）
-    python scripts/gen_test_cases.py --force
+    python scripts/gen_test_cases.py --force   # 强制覆盖已有数据
 """
 import asyncio
 import argparse
+import json
 import logging
 import sys
 import os
-import re
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -35,117 +28,138 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
 from app.models.models import Question, TestCase
-from app.services.judge_service import parse_examples
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger   = logging.getLogger(__name__)
 settings = get_settings()
 
 LEETCODE_GRAPHQL = "https://leetcode.com/graphql"
-
 CONTENT_QUERY = """
 query questionData($titleSlug: String!) {
   question(titleSlug: $titleSlug) {
-    questionId title titleSlug
-    content
-    sampleTestCase
-    exampleTestcases
+    questionId title content
   }
 }
 """
 
-# ─── LLM 生成测试用例（备用方案）─────────────────────────────────────────────
 
-GEN_PROMPT = """/no_think
-为以下算法题生成测试用例。
+# ─── HTML 解析 ────────────────────────────────────────────────────────────────
 
-题目：{title}
-难度：{difficulty}
-标签：{tags}
+def parse_examples_from_html(html: str) -> list[dict]:
+    """
+    从 LeetCode 题目 HTML 解析 Input/Output 示例。
+    对输出格式做合法性验证，跳过无法可靠对比的用例。
+    """
+    from html.parser import HTMLParser
 
-生成 3 个测试用例（输入 + 期望输出），包含：
-- 1 个普通用例
-- 1 个边界用例（空数组/单元素/负数/零等）
-- 1 个稍复杂的用例
+    class PreParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.blocks  = []
+            self._in_pre = False
+            self._cur    = ""
 
-注意：
-- input 格式要和 LeetCode 示例一致，如 "nums = [2,7,11,15]\\ntarget = 9"
-- expected 是函数的返回值，如 "[0,1]"
-- 不要包含 "Output:" 前缀
+        def handle_starttag(self, tag, attrs):
+            if tag == "pre":
+                self._in_pre = True
+                self._cur    = ""
 
-只输出 JSON，不要任何其他文字：
-{{
-  "cases": [
-    {{"input": "...", "expected": "...", "type": "normal"}},
-    {{"input": "...", "expected": "...", "type": "edge"}},
-    {{"input": "...", "expected": "...", "type": "normal"}}
-  ]
-}}"""
+        def handle_endtag(self, tag):
+            if tag == "pre" and self._in_pre:
+                self._in_pre = False
+                if self._cur.strip():
+                    self.blocks.append(self._cur.strip())
+
+        def handle_data(self, data):
+            if self._in_pre:
+                self._cur += data
+
+        def handle_entityref(self, name):
+            if self._in_pre:
+                self._cur += {"lt":"<","gt":">","amp":"&","nbsp":" "}.get(name, "")
+
+        def handle_charref(self, name):
+            if self._in_pre:
+                try:
+                    self._cur += chr(
+                        int(name[1:], 16) if name.startswith("x") else int(name)
+                    )
+                except Exception:
+                    pass
+
+    parser = PreParser()
+    parser.feed(html or "")
+
+    examples = []
+    for block in parser.blocks:
+        lines        = [l.strip() for l in block.split("\n") if l.strip()]
+        input_parts  = []
+        output       = ""
+
+        for line in lines:
+            low = line.lower()
+            if low.startswith("input:"):
+                input_parts.append(line.split(":", 1)[1].strip())
+            elif low.startswith("output:"):
+                output = line.split(":", 1)[1].strip()
+            elif input_parts and not output and not low.startswith("explanation:"):
+                input_parts.append(line)
+
+        if not input_parts or not output:
+            continue
+
+        # 验证输出格式：必须是可靠对比的值
+        if not _is_valid_output(output):
+            logger.debug(f"跳过无效输出: {output!r}")
+            continue
+
+        examples.append({
+            "input":    "\n".join(input_parts),
+            "expected": output,
+        })
+
+    return examples
 
 
-async def llm_gen_cases(question: Question) -> list[dict]:
-    """用 LLM 生成测试用例（解析失败时的备用方案）"""
-    import httpx as _httpx
-    import json
-
-    prompt = GEN_PROMPT.format(
-        title=question.title,
-        difficulty=question.difficulty,
-        tags="、".join(question.tags or []),
-    )
-
+def _is_valid_output(s: str) -> bool:
+    """
+    判断输出是否可以被可靠地对比。
+    接受：数字、布尔、列表、字符串（JSON 或 Python literal）
+    拒绝：null、空值、含省略的描述性文字
+    """
+    s = s.strip()
+    if not s or s.lower() in ("null", "none", ""):
+        return False
+    # 纯数字
     try:
-        if settings.llm_provider == "ollama":
-            base = settings.llm_base_url.replace("/v1", "")
-            async with _httpx.AsyncClient(timeout=60) as c:
-                r = await c.post(f"{base}/api/chat", json={
-                    "model":   settings.llm_model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "think":   False,
-                    "stream":  False,
-                    "options": {"temperature": 0.2},
-                })
-                raw = r.json()["message"]["content"]
-        else:
-            from openai import AsyncOpenAI
-            client = AsyncOpenAI(
-                api_key=settings.llm_api_key,
-                base_url=settings.llm_base_url,
-            )
-            resp = await client.chat.completions.create(
-                model=settings.llm_model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=600,
-                temperature=0.2,
-            )
-            raw = resp.choices[0].message.content or ""
-
-        # 提取 JSON
-        match = re.search(r"\{[\s\S]*\}", raw)
-        if not match:
-            return []
-        data = json.loads(match.group(0))
-        return data.get("cases", [])
-
-    except Exception as e:
-        logger.warning(f"LLM 生成测试用例失败 [{question.title}]: {e}")
-        return []
+        float(s)
+        return True
+    except ValueError:
+        pass
+    # JSON
+    try:
+        json.loads(s)
+        return True
+    except Exception:
+        pass
+    # Python literal（处理 True/False 等）
+    try:
+        import ast
+        ast.literal_eval(s)
+        return True
+    except Exception:
+        pass
+    return False
 
 
-# ─── 从 LeetCode API 获取示例 ─────────────────────────────────────────────────
+# ─── 拉取题目内容 ─────────────────────────────────────────────────────────────
 
-async def fetch_examples(title_slug: str, client: httpx.AsyncClient) -> list[dict]:
-    """从 LeetCode API 拉取题目内容，解析示例测试用例"""
+async def fetch_content(title_slug: str, client: httpx.AsyncClient) -> str | None:
+    """拉取题目 HTML，返回 content 字段"""
     try:
         resp = await client.post(
             LEETCODE_GRAPHQL,
-            json={
-                "query":     CONTENT_QUERY,
-                "variables": {"titleSlug": title_slug},
-            },
+            json={"query": CONTENT_QUERY, "variables": {"titleSlug": title_slug}},
             headers={
                 "Content-Type": "application/json",
                 "User-Agent":   "Mozilla/5.0",
@@ -153,41 +167,29 @@ async def fetch_examples(title_slug: str, client: httpx.AsyncClient) -> list[dic
             },
         )
         resp.raise_for_status()
-        data = resp.json()
-        q    = data.get("data", {}).get("question")
-        if not q:
-            return []
-
-        # 从 HTML 解析示例
-        examples = parse_examples(q.get("content", ""))
-        return examples
-
+        q = resp.json().get("data", {}).get("question")
+        return q.get("content", "") if q else None
     except Exception as e:
-        logger.warning(f"拉取题目内容失败 [{title_slug}]: {e}")
-        return []
+        logger.warning(f"拉取内容失败 [{title_slug}]: {e}")
+        return None
 
 
-# ─── 主处理函数 ───────────────────────────────────────────────────────────────
+# ─── 单题处理 ─────────────────────────────────────────────────────────────────
 
-async def process_question(
+async def process_one(
     question:    Question,
     http_client: httpx.AsyncClient,
     db:          AsyncSession,
-    force:       bool = False,
+    force:       bool,
 ) -> str:
-    """
-    为单道题生成测试用例。
-    返回："ok" | "skip" | "fail"
-    """
-    # 检查是否已有测试用例
+    """返回 'ok' | 'skip' | 'fail'"""
     if not force:
-        result = await db.execute(
+        existing = await db.execute(
             select(TestCase).where(TestCase.question_id == question.id).limit(1)
         )
-        if result.scalar_one_or_none():
+        if existing.scalar_one_or_none():
             return "skip"
 
-    # 如果 force，先删除已有的
     if force:
         existing = await db.execute(
             select(TestCase).where(TestCase.question_id == question.id)
@@ -195,33 +197,25 @@ async def process_question(
         for tc in existing.scalars().all():
             await db.delete(tc)
 
-    # 方式1：从 LeetCode API 解析示例
-    examples = await fetch_examples(question.title_slug, http_client)
-
-    # 方式2：LLM 生成（解析失败时）
-    if not examples:
-        logger.info(f"[{question.title}] HTML解析无结果，尝试LLM生成")
-        llm_cases = await llm_gen_cases(question)
-        examples  = [
-            {"input": c["input"], "expected": c["expected"]}
-            for c in llm_cases
-        ]
-
-    if not examples:
-        logger.warning(f"[{question.title}] 无法生成测试用例，跳过")
+    html = await fetch_content(question.title_slug, http_client)
+    if html is None:
         return "fail"
 
-    # 存入数据库
+    # 只用 HTML 解析，不用 LLM，保证数据干净
+    examples = parse_examples_from_html(html)
+
+    if not examples:
+        logger.warning(f"⚠  [{question.title}] 解析失败，跳过（宁缺毋滥）")
+        return "fail"
+
     for ex in examples:
-        tc = TestCase(
+        db.add(TestCase(
             question_id=question.id,
             input_data=ex["input"],
             expected=ex["expected"],
-            case_type=ex.get("type", "sample"),
-        )
-        db.add(tc)
+            case_type="sample",
+        ))
 
-    await db.flush()
     logger.info(f"✅ [{question.difficulty.upper():6s}] {question.title} → {len(examples)} 个用例")
     return "ok"
 
@@ -233,12 +227,10 @@ async def gen_test_cases(
     limit:      int  = 0,
     force:      bool = False,
 ) -> None:
-
     engine            = create_async_engine(settings.database_url, echo=False)
     AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with AsyncSessionLocal() as db:
-        # 查询已入库的题目
         query = select(Question).where(Question.is_indexed == True)
         if difficulty != "all":
             query = query.where(Question.difficulty == difficulty)
@@ -246,30 +238,28 @@ async def gen_test_cases(
 
         result    = await db.execute(query)
         questions = result.scalars().all()
-
         if limit > 0:
             questions = questions[:limit]
 
         total = len(questions)
-        logger.info(f"待处理题目: {total} 道 | difficulty={difficulty} force={force}")
+        logger.info(f"待处理: {total} 道 | difficulty={difficulty} force={force}")
 
         ok = skip = fail = 0
 
         async with httpx.AsyncClient(timeout=20) as http_client:
             for i, q in enumerate(questions, 1):
-                status = await process_question(q, http_client, db, force=force)
+                status = await process_one(q, http_client, db, force=force)
 
-                if status == "ok":    ok   += 1
+                if status == "ok":     ok   += 1
                 elif status == "skip": skip += 1
                 else:                  fail += 1
 
                 if i % 10 == 0:
                     await db.commit()
-                    logger.info(f"进度 {i}/{total} | 成功={ok} 跳过={skip} 失败={fail}")
+                    logger.info(f"进度 {i}/{total} | ok={ok} skip={skip} fail={fail}")
 
-                # 避免频繁请求 LeetCode
                 if status != "skip":
-                    await asyncio.sleep(1.0)
+                    await asyncio.sleep(0.8)
 
         await db.commit()
 
@@ -277,25 +267,23 @@ async def gen_test_cases(
 
     logger.info(
         f"\n{'='*40}\n"
-        f"完成！成功={ok} 跳过={skip} 失败={fail}\n"
+        f"完成！\n"
+        f"成功: {ok} 道\n"
+        f"跳过（已有数据）: {skip} 道\n"
+        f"失败（解析失败，已跳过）: {fail} 道\n"
         f"{'='*40}"
     )
 
 
-# ─── CLI ──────────────────────────────────────────────────────────────────────
+# ─── CLI ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="为题目生成测试用例")
+    parser = argparse.ArgumentParser(description="生成题目测试用例（仅 HTML 解析）")
     parser.add_argument("--difficulty", default="all",
                         choices=["all", "easy", "medium", "hard"])
     parser.add_argument("--limit", type=int, default=0,
                         help="限制处理数量（0=不限制）")
     parser.add_argument("--force", action="store_true",
-                        help="强制重新生成（覆盖已有数据）")
+                        help="强制覆盖已有测试用例")
     args = parser.parse_args()
-
-    asyncio.run(gen_test_cases(
-        difficulty=args.difficulty,
-        limit=args.limit,
-        force=args.force,
-    ))
+    asyncio.run(gen_test_cases(args.difficulty, args.limit, args.force))
