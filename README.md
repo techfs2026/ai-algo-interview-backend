@@ -182,6 +182,39 @@ JSON提取 / 类型强转"]
 题目权重 = 区分度（通过率 20%~60% 最佳）× 知识点纯度
 ```
 
+**⑤ LLM 可观测性**
+
+每次 LLM 调用自动埋点，持久化到 `llm_call_logs` 表，通过接口实时查询：
+
+```bash
+GET /api/v1/users/observability/llm?hours=24
+# 返回：各场景成功率、三层容错触发率、延迟分位数（P50/P95/P99）
+```
+
+```json
+{
+  "overall": {
+    "success_rate": 0.97,
+    "repair_rate": 0.83,
+    "retry_rate": 0.14,
+    "fallback_rate": 0.03,
+    "p50_latency_ms": 8200,
+    "p95_latency_ms": 18400
+  }
+}
+```
+
+**⑥ 判题策略模式**
+
+接口与实现分离，切换判题方式只改 `.env`，业务代码零改动：
+
+```
+judge/
+├── base.py              # 抽象接口（BaseJudge）
+├── subprocess_judge.py  # 当前实现：本地执行
+└── judge0_judge.py      # 待接入：沙箱隔离
+```
+
 ---
 
 ## 技术栈
@@ -327,69 +360,65 @@ python scripts/build_vector_index/gen_test_cases.py
 | `EMBEDDING_VECTOR_SIZE` | 向量维度（本地 768，云端 1536）| 768 |
 | `LLM_TIMEOUT_SELECT` | 选题超时秒数 | 60（本地）/ 8（云端）|
 | `DAILY_SWAP_LIMIT` | 每日换题次数 | 2 |
+| `JUDGE_PROVIDER` | 判题实现（subprocess/judge0）| subprocess |
 
 ---
 
-## 项目结构
+## 已知不足
 
-```
-ai-algo-interview/
-├── app/
-│   ├── api/v1/
-│   │   ├── users.py          用户 + 问卷 API
-│   │   ├── interview.py      选题 + 换题 API
-│   │   └── analysis.py       判题 + 流式分析 + 推荐 API
-│   ├── services/
-│   │   ├── user_service.py   用户画像 CRUD + 四维更新算法
-│   │   ├── select_service.py 选题（HyDE + RAG + 四维重排）
-│   │   ├── question_service.py 题目查询 + Redis 缓存
-│   │   ├── judge_service.py  判题服务（可替换实现）
-│   │   └── analysis_service.py AI 流式代码分析
-│   └── core/
-│       ├── llm_client.py     LLM 客户端（多环境自动路由）
-│       ├── llm_resilience.py 三层容错框架
-│       ├── database.py       数据库
-│       ├── redis_client.py   缓存
-│       ├── qdrant_client.py  向量数据库
-│       └── config.py         配置管理
-├── scripts/build_vector_index/
-│   ├── build_index.py        向量建库主脚本
-│   ├── gen_test_cases.py     测试用例生成
-│   ├── semantic_expander.py  LLM 语义扩展
-│   └── question_slugs.py     110 道高频题 slug 列表
-├── web/
-│   ├── index.html            单页应用入口
-│   ├── style.css             样式
-│   └── app.js                前端逻辑
-├── tests/                    49 个单元测试
-├── alembic/                  数据库迁移文件
-├── docker-compose.yml        本地开发环境
-└── .env.example              环境变量模板
-```
+> 以下是当前版本有意简化的地方，均有明确的升级路径。
+
+### 判题系统
+
+| 问题 | 现状 | 升级路径 |
+|------|------|---------|
+| **测试用例来源** | 仅从 LeetCode 题目 HTML 解析示例（2~3 条） | 接入完整测试用例集 / Judge0 官方用例 |
+| **答案顺序** | `[0,1]` 和 `[1,0]` 视为不同，不处理无序输出 | 对特定题目类型做集合比较 |
+| **支持语言** | Python / JavaScript | Judge0 支持 50+ 语言 |
+| **沙箱隔离** | subprocess 直接执行，无隔离 | 替换为 Judge0 / Piston |
+| **部分通过信息** | 只给出通过几条，不展示具体失败用例 | 返回失败用例的输入和实际输出 |
+
+**升级方式**：实现 `judge/judge0_judge.py` 里的 `execute` 方法，修改 `.env` 中的 `JUDGE_PROVIDER=judge0`，业务代码零改动。
+
+### 选题系统
+
+| 问题 | 现状 | 升级路径 |
+|------|------|---------|
+| **选题延迟** | 本地 Ollama 约 8~10s | 切换云端 LLM（QWen/DeepSeek）降至 2~3s |
+| **冷启动精度** | 问卷自评到初始 level 的映射较粗糙 | 用多道标定题做 IRT 冷启动 |
+| **多样性** | 只过滤已解决题目，不防止知识点长期偏向 | 引入长期多样性约束 |
+
+### 测试覆盖
+
+| 问题 | 现状 |
+|------|------|
+| **集成测试** | 只有单元测试，无端到端测试 |
+| **判题测试** | 判题逻辑无法在 CI 中自动验证（依赖本地 Python 环境）|
 
 ---
 
 ## Roadmap
 
+
 ### 近期（v0.2）
 
-- [ ] **数据统计**：用户数据统计页面
-- [ ] **测试用例完善**：验证所有题目的测试用例是否正常；用户答错题，给出错误的那条测试用例 
-- [ ] **答题页面优化**：答题页面增加运行按钮，用户可以测试代码是否正确，然后再考虑提交
-- [ ] **题库扩充**：从 110 道扩展到 500 道，覆盖更多标签和边界用例
+- [ ] **答题页面优化**：增加运行按钮，用户可以先测试代码再提交
+- [ ] **失败用例展示**：答错时展示具体失败的测试用例（输入/期望/实际）
+- [ ] **题库扩充**：从 127 道扩展到 300+ 道，覆盖更多 NeetCode 题目
 - [ ] **前端优化**：响应式布局完善，移动端支持
 
 ### 中期（v0.3）
 
-- [ ] **判题升级**：接入 Judge0 或 Piston，支持完整测试用例集和更多语言
+- [ ] **判题升级**：实现 `judge0_judge.py`，接入 Judge0 沙箱，支持完整测试用例集
+- [ ] **选题加速**：切换云端 LLM，选题从 8s 降至 2~3s
 - [ ] **画像导出**：生成阶段性学习报告（PDF / 分享链接）
-- [ ] **多轮对话分析**：代码分析支持追问（"第二种解法是什么？"）
+- [ ] **多轮对话分析**：代码分析支持追问
 - [ ] **真实面试模式**：限时 + 不提示 + 事后复盘
-- [ ] **错题本**：自动整理失败题目，定期安排复习
 
 ### 长期（v1.0）
 
 - [ ] **用户账号系统**：OAuth 登录，跨设备同步画像
+- [ ] **错题本**：自动整理失败题目，定期安排复习
 - [ ] **社区题库**：用户共建测试用例和解题笔记
 
 ---

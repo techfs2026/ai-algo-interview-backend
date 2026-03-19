@@ -1,25 +1,13 @@
 """
 向量建库主脚本
 
-流程：
-1. 从预置 slug 列表获取题目
-2. 调用 LeetCode 单题 API 拉取详情
-3. LLM 语义扩展
-4. 生成 embedding
-5. 存入 Qdrant + PostgreSQL
+位置：scripts/build_vector_index/build_index.py
 
 用法：
-    # 建库所有预置题目
-    python scripts/build_index.py
-
-    # 只建库 easy 题
-    python scripts/build_index.py --difficulty easy
-
-    # 限制数量（测试用）
-    python scripts/build_index.py --limit 5
-
-    # 断点续传
-    python scripts/build_index.py --resume
+    python scripts/build_vector_index/build_index.py
+    python scripts/build_vector_index/build_index.py --difficulty easy
+    python scripts/build_vector_index/build_index.py --limit 5
+    python scripts/build_vector_index/build_index.py --resume
 """
 import asyncio
 import argparse
@@ -28,12 +16,14 @@ import sys
 import os
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# 项目根目录（build_vector_index 的上上级）
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, ROOT)
 
 import httpx
 from openai import AsyncOpenAI
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import PointStruct, VectorParams, Distance
+from qdrant_client.models import PointStruct, VectorParams, Distance, PayloadSchemaType
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
@@ -44,17 +34,13 @@ from scripts.build_vector_index.leetcode_client import fetch_question_by_slug, p
 from scripts.build_vector_index.semantic_expander import expand_question_semantic, build_index_text
 from scripts.build_vector_index.question_slugs import get_slugs_by_difficulty
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger   = logging.getLogger(__name__)
 settings = get_settings()
 
-from app.core.config import get_settings as _get_settings
-VECTOR_SIZE   = _get_settings().embedding_vector_size  # 从配置读取
-BATCH_SIZE    = 3      # 每批并发数（本地 Ollama 控制小一点）
-REQUEST_DELAY = 1.5    # 批间延迟（秒）
+VECTOR_SIZE   = settings.embedding_vector_size
+BATCH_SIZE    = 3
+REQUEST_DELAY = 1.5
 
 
 # ─── Embedding ────────────────────────────────────────────────────────────────
@@ -77,7 +63,8 @@ async def get_embedding(text: str) -> list[float]:
 
 async def ensure_collection(client: AsyncQdrantClient) -> None:
     collections = await client.get_collections()
-    names = [c.name for c in collections.collections]
+    names       = [c.name for c in collections.collections]
+
     if settings.qdrant_collection not in names:
         await client.create_collection(
             collection_name=settings.qdrant_collection,
@@ -86,6 +73,19 @@ async def ensure_collection(client: AsyncQdrantClient) -> None:
         logger.info(f"创建 collection: {settings.qdrant_collection}")
     else:
         logger.info(f"collection 已存在: {settings.qdrant_collection}")
+
+    # 幂等建索引，已存在不报错
+    await client.create_payload_index(
+        collection_name=settings.qdrant_collection,
+        field_name="difficulty",
+        field_schema=PayloadSchemaType.KEYWORD,
+    )
+    await client.create_payload_index(
+        collection_name=settings.qdrant_collection,
+        field_name="ac_rate",
+        field_schema=PayloadSchemaType.FLOAT,
+    )
+    logger.info("payload 索引已就绪 (difficulty, ac_rate)")
 
 
 # ─── 单题处理 ─────────────────────────────────────────────────────────────────
@@ -97,15 +97,9 @@ async def process_one(
     db:          AsyncSession,
     resume:      bool,
 ) -> str:
-    """
-    处理单道题。
-    返回值："ok" | "skip" | "fail"
-    """
-    # 断点续传检查
+    """返回 'ok' | 'skip' | 'fail'"""
     if resume:
-        result = await db.execute(
-            select(Question).where(Question.title_slug == slug)
-        )
+        result   = await db.execute(select(Question).where(Question.title_slug == slug))
         existing = result.scalar_one_or_none()
         if existing and existing.is_indexed:
             return "skip"
@@ -135,10 +129,8 @@ async def process_one(
         return "fail"
 
     # 4. 存 PostgreSQL
-    result = await db.execute(
-        select(Question).where(Question.id == meta["id"])
-    )
-    q = result.scalar_one_or_none()
+    result = await db.execute(select(Question).where(Question.id == meta["id"]))
+    q      = result.scalar_one_or_none()
     if q is None:
         q = Question(
             id=meta["id"],
@@ -183,12 +175,7 @@ async def process_one(
 
 # ─── 主流程 ───────────────────────────────────────────────────────────────────
 
-async def build_index(
-    difficulty: str  = "all",
-    limit:      int  = 0,
-    resume:     bool = False,
-) -> None:
-
+async def build_index(difficulty: str = "all", limit: int = 0, resume: bool = False) -> None:
     slugs = get_slugs_by_difficulty(difficulty)
     if limit > 0:
         slugs = slugs[:limit]
@@ -208,8 +195,7 @@ async def build_index(
     async with httpx.AsyncClient(timeout=30) as http_client:
         async with AsyncSessionLocal() as db:
             for i in range(0, total, BATCH_SIZE):
-                batch = slugs[i:i + BATCH_SIZE]
-
+                batch   = slugs[i:i + BATCH_SIZE]
                 results = await asyncio.gather(
                     *[process_one(s, http_client, qdrant, db, resume) for s in batch],
                     return_exceptions=True,
@@ -219,12 +205,9 @@ async def build_index(
                     if isinstance(r, Exception):
                         fail += 1
                         logger.error(f"异常: {r}")
-                    elif r == "ok":
-                        ok += 1
-                    elif r == "skip":
-                        skip += 1
-                    else:
-                        fail += 1
+                    elif r == "ok":    ok   += 1
+                    elif r == "skip":  skip += 1
+                    else:              fail += 1
 
                 await db.commit()
 
@@ -241,23 +224,15 @@ async def build_index(
     logger.info(
         f"\n{'='*40}\n"
         f"建库完成！耗时 {elapsed:.0f}s\n"
-        f"成功: {ok} | 跳过: {skip} | 失败: {fail}\n"
+        f"成功={ok} | 跳过={skip} | 失败={fail}\n"
         f"{'='*40}"
     )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LeetCode 题目向量建库")
-    parser.add_argument("--difficulty", default="all",
-                        choices=["all", "easy", "medium", "hard"])
-    parser.add_argument("--limit", type=int, default=0,
-                        help="限制题目数量，0=不限制")
-    parser.add_argument("--resume", action="store_true",
-                        help="断点续传，跳过已入库题目")
+    parser.add_argument("--difficulty", default="all", choices=["all", "easy", "medium", "hard"])
+    parser.add_argument("--limit",  type=int, default=0)
+    parser.add_argument("--resume", action="store_true", help="断点续传，跳过已入库题目")
     args = parser.parse_args()
-
-    asyncio.run(build_index(
-        difficulty=args.difficulty,
-        limit=args.limit,
-        resume=args.resume,
-    ))
+    asyncio.run(build_index(args.difficulty, args.limit, args.resume))

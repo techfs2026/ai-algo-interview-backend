@@ -110,6 +110,7 @@ async def llm_call_with_resilience(
     timeout:     int | None = None,
     model:       str | None = None,
     stream:      bool = False,
+    max_tokens:  int | None = None,
 ) -> tuple[Any, LLMCallMetrics]:
     """
     统一LLM调用入口，内置三层容错。
@@ -156,7 +157,7 @@ async def llm_call_with_resilience(
 
         try:
             raw = await asyncio.wait_for(
-                _call_llm(current_messages, model),
+                _call_llm(current_messages, model, max_tokens=max_tokens),
                 timeout=timeout,
             )
             last_raw_output = raw
@@ -290,12 +291,12 @@ async def llm_stream_call(
 
 # ─── 内部工具函数 ─────────────────────────────────────────────────────────────
 
-async def _call_llm(messages: list[dict], model: str) -> str:
+async def _call_llm(messages: list[dict], model: str, max_tokens: int | None = None) -> str:
     """调用LLM，返回原始文本输出"""
     return await chat_completion(
         messages=messages,
         model=model,
-        max_tokens=settings.llm_max_tokens,
+        max_tokens=max_tokens or settings.llm_max_tokens,
         temperature=settings.llm_temperature,
     )
 
