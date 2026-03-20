@@ -27,6 +27,8 @@ const S = {
   sessionId: null,
   question:  null,
   swapLeft:  2,       // 本地记录剩余换题次数
+  hintCount: 0,       // 当前题已使用提示次数
+  hints:     [],      // 当前题的 LeetCode 官方提示
   timeLeft:  0,
   timerId:   null,
   editor:    null,
@@ -192,9 +194,22 @@ function initEditor(lang = 'python') {
 
 // ── 题目面板重置（换题/新题前必须调用）──────────────
 function resetQuestionPanel() {
-  // 换题/选题时重置运行结果区
+  // 换题/选题时重置运行结果区和提示区
   const r = $('e-run-result');
   if (r) r.style.display = 'none';
+  const hs = $('hint-section');
+  if (hs) hs.style.display = 'none';
+  const bh = $('btn-hint');
+  if (bh) bh.style.display = 'none';   // 先隐藏，loadContent 拿到 hints 后再显示
+  const hm = $('hint-messages');
+  if (hm) hm.innerHTML = '';
+  // 重置输入框状态
+  const hi = $('hint-input');
+  const hs2 = $('hint-send');
+  if (hi)  { hi.disabled = false;  hi.placeholder = '按回车查看下一条提示…'; }
+  if (hs2) { hs2.disabled = false; }
+  S.hintCount = 0;
+  S.hints     = [];
   
   $('q-title').textContent  = '加载中…';
   $('q-tags').innerHTML     = '';
@@ -225,13 +240,18 @@ async function loadContent(sessionId) {
   try {
     const c = await req('GET', `/interview/session/${sessionId}/content`);
     $('q-content').innerHTML = c.content || '<p>暂无描述</p>';
-    const lang    = $('lang').value;
-    // LeetCode langSlug: python=Python2风格, python3=Python3风格
-    // 前端选 python 时，优先取 python3 模板（有类型注解，判题更准确）
-    const slugMap  = { python: 'python3', javascript: 'javascript' };
+
+    // 存 hints，有提示才显示按钮
+    S.hints     = (c.hints || []).filter(h => h && h.trim());
+    S.hintCount = 0;
+    const btn   = $('btn-hint');
+    if (btn) btn.style.display = S.hints.length ? 'block' : 'none';
+
+    const lang       = $('lang').value;
+    const slugMap    = { python: 'python3', javascript: 'javascript' };
     const targetSlug = slugMap[lang] || lang;
-    const snippet = c.code_snippets?.find(s => s.langSlug === targetSlug)
-                 || c.code_snippets?.find(s => s.langSlug === lang);
+    const snippet    = c.code_snippets?.find(s => s.langSlug === targetSlug)
+                    || c.code_snippets?.find(s => s.langSlug === lang);
     if (snippet && S.editor) S.editor.setValue(snippet.code);
   } catch {
     $('q-content').innerHTML =
@@ -687,6 +707,83 @@ const App = {
 
   closeRun() {
     $('e-run-result').style.display = 'none';
+  },
+
+  // ── 官方提示 ─────────────────────────────────────────
+  openHint() {
+    $('btn-hint').style.display     = 'none';
+    $('hint-section').style.display = 'block';
+    if (!$('hint-messages').children.length) {
+      this._showNextHint();
+    }
+  },
+
+  closeHint() {
+    $('hint-section').style.display = 'none';
+    $('btn-hint').style.display     = 'block';
+  },
+
+  sendHint() {
+    if ($('hint-input').disabled) return;
+    this._showNextHint();
+  },
+
+  _showNextHint() {
+    const msgs  = $('hint-messages');
+    const idx   = S.hintCount;
+    const hints = S.hints || [];
+
+    // 已经没有更多提示，直接 return（按钮已禁用，不会到这里）
+    if (idx >= hints.length) return;
+
+    S.hintCount++;
+    const isLast = S.hintCount >= hints.length;
+
+    // 只显示序号标签（去掉对话框风格，改为简洁分隔线）
+    const labelDiv = document.createElement('div');
+    labelDiv.className   = 'hint-label';
+    labelDiv.textContent = hints.length > 1 ? `提示 ${idx + 1} / ${hints.length}` : '提示';
+    msgs.appendChild(labelDiv);
+
+    const agentDiv = document.createElement('div');
+    agentDiv.className = 'hint-msg-agent';
+    agentDiv.innerHTML = '';
+    msgs.appendChild(agentDiv);
+    msgs.scrollTop = msgs.scrollHeight;
+
+    const text = hints[idx];
+    let i = 0;
+    const tick = () => {
+      if (i >= text.length) {
+        agentDiv.innerHTML = md(text);
+        msgs.scrollTop = msgs.scrollHeight;
+        // 最后一条：打完就禁用，不用点"下一条"
+        if (isLast) {
+          $('hint-send').disabled     = true;
+          $('hint-input').disabled    = true;
+          $('hint-input').placeholder = '已展示全部提示';
+        } else {
+          $('hint-input').placeholder = `还有 ${hints.length - S.hintCount} 条，按回车继续`;
+        }
+        return;
+      }
+      i = Math.min(i + 3, text.length);
+      agentDiv.textContent = text.slice(0, i);
+      msgs.scrollTop = msgs.scrollHeight;
+      setTimeout(tick, 14);
+    };
+    tick();
+  },
+
+  redo() {
+    // 重做当前题目：回到答题页，清空代码，重置计时
+    if (!S.question) { this.again(); return; }
+    show('interview');
+    resetQuestionPanel();
+    initEditor($('lang')?.value || 'python');
+    renderQuestion(S.question, null);
+    startTimer(S.question.time_limit || 1800);
+    loadContent(S.sessionId);
   },
 
   async complete(sessionId) {

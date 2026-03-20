@@ -125,6 +125,24 @@
         <div class="skel"></div><div class="skel sm"></div>
         <div class="skel"></div><div class="skel sm"></div>
       </div>
+
+      <!-- 提示区域 -->
+      <div class="hint-section" id="hint-section" style="display:none">
+        <div class="hint-divider">
+          <span>💡 官方提示</span>
+          <button class="hint-close" onclick="App.closeHint()">收起</button>
+        </div>
+        <div class="hint-messages" id="hint-messages"></div>
+        <div class="hint-input-row">
+          <input class="hint-input" id="hint-input"
+                 placeholder="按回车查看下一条提示…" maxlength="1"
+                 onkeydown="if(event.key==='Enter')App.sendHint()" readonly>
+          <button class="hint-send" id="hint-send" onclick="App.sendHint()">下一条</button>
+        </div>
+      </div>
+      <button class="btn-hint" id="btn-hint" onclick="App.openHint()">
+        💡 我需要提示
+      </button>
     </aside>
     <div class="e-panel">
       <div class="e-bar">
@@ -158,6 +176,7 @@
   <nav class="nav">
     <div class="logo sm">algo<em>interview</em></div>
     <div class="nav-center">
+      <button class="btn-outline" onclick="App.redo()">重做此题</button>
       <button class="btn-outline" onclick="App.again()">再来一题 →</button>
     </div>
     <div class="nav-right"></div>
