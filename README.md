@@ -127,12 +127,17 @@ HyDE 变体"]
 |------|------|
 | **能力画像** | 15 个知识点维度，冷启动问卷 + 答题动态校准 |
 | **AI 选题** | HyDE 变体 RAG，四维重排，每次选题都贴合当前水平 |
-| **在线答题** | CodeMirror 编辑器，支持 Python / JavaScript |
-| **本地判题** | subprocess 执行 + 示例用例对比，生产环境可接入 Judge0 |
-| **AI 代码分析** | 六条路径流式分析，逐字打出效果，支持 LaTeX 公式渲染 |
+| **选题加载动画** | 毛玻璃遮罩 + 文案轮转（"向量空间检索中…"），等待不无聊 |
+| **在线答题** | CodeMirror 编辑器，支持 Python 3 / JavaScript |
+| **运行按钮** | 代码区右下角，运行不提交，结果展示在编辑器下方，不跳页面 |
+| **本地判题** | subprocess 执行 + 测试用例对比，生产环境可无缝切换 Judge0 |
+| **失败用例展示** | 答错时展示第一条失败用例的输入 / 期望 / 实际输出 |
+| **AI 代码分析** | 四条路径流式分析（未实现 / 编译错误 / 答案错误 / 通过），逐字打出，支持 LaTeX |
+| **官方提示** | 答题中卡住时查看 LeetCode 官方提示，分阶段展示，逐字打出 |
 | **推荐题单** | 相关题 / 薄弱点 / 新知识点三维推荐，点击直接开始做题 |
+| **重做题目** | 结果页一键重做当前题，不限次数 |
 | **换题机制** | 每日 2 次，换题原因作为隐式反馈优化画像 |
-| **用户统计** | 技能画像可视化进度条，答题历史统计 |
+| **用户统计** | 雷达图 + 15 维知识点进度，答题历史统计 |
 
 ### 技术亮点
 
@@ -167,12 +172,13 @@ JSON提取 / 类型强转"]
 ```
 
 **② HyDE 变体选题**
+
 不直接用用户画像生成检索向量，而是让 LLM 先将用户状态翻译成与入库文本同风格的检索意图，保证查询向量和索引向量在同一语义空间对齐，召回质量显著优于直接向量匹配。
 
 **③ 多环境 LLM 路由**
 ```bash
 # 本地 Ollama → /api/chat 原生接口（think=false 关闭思考模式）
-# 云端 QWen / DeepSeek → /v1/chat/completions（OpenAI 兼容，开发阶段暂未测试）
+# 云端 QWen / DeepSeek → /v1/chat/completions（OpenAI 兼容）
 # 切换只改 .env，代码零改动
 ```
 
@@ -204,7 +210,7 @@ GET /api/v1/users/observability/llm?hours=24
 }
 ```
 
-**⑥ 判题策略模式**
+**⑥ 判题策略模式 + 序列化层**
 
 接口与实现分离，切换判题方式只改 `.env`，业务代码零改动：
 
@@ -213,6 +219,23 @@ judge/
 ├── base.py              # 抽象接口（BaseJudge）
 ├── subprocess_judge.py  # 当前实现：本地执行
 └── judge0_judge.py      # 待接入：沙箱隔离
+```
+
+通过函数签名解析自动识别参数类型，实现双向序列化：
+
+```python
+# 支持两种签名格式
+def invertTree(self, root: Optional[TreeNode]) -> Optional[TreeNode]:  # 格式1：类型注解
+def mergeTwoLists(self, l1, l2):                                        # 格式2：docstring
+    """
+    :type l1: Optional[ListNode]
+    :rtype: Optional[ListNode]
+    """
+
+# 自动处理的数据结构
+[4,2,7,1,3]     → TreeNode（层序构建）→ [4,7,2,9,6,3,1]（层序序列化）
+[1,2,4]         → ListNode（无环链表）→ [1,1,2,3,4,4]
+[3,2,0,-4] pos=1 → ListNode（有环链表，Floyd 判环）→ true/false
 ```
 
 ---
@@ -231,6 +254,7 @@ judge/
 | 判题（开发）| subprocess 本地执行 |
 | 判题（生产）| Judge0 / Piston API |
 | 前端 | HTML5 + CSS3 + Vanilla JS + CodeMirror + KaTeX |
+| 测试 | pytest（72 个单元测试）|
 
 ---
 
@@ -294,7 +318,6 @@ ollama pull nomic-embed-text
 ### 第四步：初始化数据库
 
 ```bash
-alembic revision --autogenerate -m "init database tables"
 alembic upgrade head
 ```
 
@@ -304,14 +327,13 @@ alembic upgrade head
 # 先用少量题目测试链路
 python scripts/build_vector_index/build_index.py --difficulty easy --limit 5
 
-# 确认正常后建完整库（约 110 道题，本地 Ollama 需要 30~60 分钟）
+# 确认正常后建完整库（127 道题，本地 Ollama 约 30~60 分钟）
 python scripts/build_vector_index/build_index.py
 
 # 生成测试用例
 python scripts/build_vector_index/gen_test_cases.py
 
-# 检查数据完整性并清理脏数据
-python scripts/check_data_integrity.py
+# 检查数据完整性，清理脏数据
 python scripts/check_data_integrity.py --fix
 ```
 
@@ -331,28 +353,22 @@ cd web && python3 -m http.server 3000
 
 ## 部署指南
 
-### 生产环境建议(暂未开发到此环节)
+### 生产环境建议（暂未开发到此环节）
 
 **LLM 服务**：替换为 QWen Plus 或 DeepSeek，响应速度从本地的 15~30s 降至 2~3s。
 
 **判题服务**：替换为 Judge0，提供真正的沙箱隔离和完整测试用例集：
 ```bash
-# 注册 RapidAPI 获取 Judge0 API Key
-# 在 .env 中配置
+JUDGE_PROVIDER=judge0
 JUDGE0_URL=https://judge0-ce.p.rapidapi.com
 JUDGE0_API_KEY=your-key
 ```
 
 **向量维度**：切换到云端 Embedding 后，需要重建 Qdrant collection：
 ```bash
-# 删除旧 collection
 curl -X DELETE http://localhost:6333/collections/questions
-
 # 修改 .env：EMBEDDING_VECTOR_SIZE=1536
-
-# 重新建库
 python scripts/build_vector_index/build_index.py
-python scripts/build_vector_index/gen_test_cases.py
 ```
 
 ### 环境变量速查
@@ -362,9 +378,10 @@ python scripts/build_vector_index/gen_test_cases.py
 | `LLM_PROVIDER` | LLM 提供商（ollama/qwen/deepseek）| ollama |
 | `LLM_MODEL` | 模型名称 | qwen3.5:latest |
 | `EMBEDDING_VECTOR_SIZE` | 向量维度（本地 768，云端 1536）| 768 |
-| `LLM_TIMEOUT_SELECT` | 选题超时秒数 | 60（本地）/ 8（云端）|
+| `LLM_TIMEOUT_SELECT` | 选题超时秒数 | 60 |
 | `DAILY_SWAP_LIMIT` | 每日换题次数 | 2 |
 | `JUDGE_PROVIDER` | 判题实现（subprocess/judge0）| subprocess |
+| `HINT_MAX_COUNT` | 每道题最多可查看的提示条数 | 3 |
 
 ---
 
@@ -376,11 +393,10 @@ python scripts/build_vector_index/gen_test_cases.py
 
 | 问题 | 现状 | 升级路径 |
 |------|------|---------|
-| **测试用例来源** | 仅从 LeetCode 题目 HTML 解析示例（2~3 条） | 接入完整测试用例集 / Judge0 官方用例 |
-| **答案顺序** | `[0,1]` 和 `[1,0]` 视为不同，不处理无序输出 | 对特定题目类型做集合比较 |
-| **支持语言** | Python / JavaScript | Judge0 支持 50+ 语言 |
+| **测试用例来源** | 仅从 LeetCode HTML 解析示例（2~3 条） | 接入 Judge0 完整测试用例集 |
+| **答案顺序** | `[0,1]` 和 `[1,0]` 视为不同 | 对特定题目类型做集合比较 |
+| **支持语言** | Python 3（JavaScript 部分支持） | Judge0 支持 50+ 语言 |
 | **沙箱隔离** | subprocess 直接执行，无隔离 | 替换为 Judge0 / Piston |
-| **部分通过信息** | 只给出通过几条，不展示具体失败用例 | 返回失败用例的输入和实际输出 |
 
 **升级方式**：实现 `judge/judge0_judge.py` 里的 `execute` 方法，修改 `.env` 中的 `JUDGE_PROVIDER=judge0`，业务代码零改动。
 
@@ -388,35 +404,35 @@ python scripts/build_vector_index/gen_test_cases.py
 
 | 问题 | 现状 | 升级路径 |
 |------|------|---------|
-| **选题延迟** | 本地 Ollama 约 8~10s | 切换云端 LLM（QWen/DeepSeek）降至 2~3s |
-| **冷启动精度** | 问卷自评到初始 level 的映射较粗糙 | 用多道标定题做 IRT 冷启动 |
-| **多样性** | 只过滤已解决题目，不防止知识点长期偏向 | 引入长期多样性约束 |
+| **选题延迟** | 本地 Ollama 约 8~10s | 切换云端 LLM 降至 2~3s |
+| **冷启动精度** | 问卷自评映射较粗糙 | 用多道标定题做 IRT 冷启动 |
+| **多样性** | 只过滤已解决题目 | 引入长期多样性约束 |
 
 ---
 
 ## Roadmap
 
+### 近期（v0.2）✅ 已完成
 
-### 近期（v0.2）
-
-- [ ] **答题页面优化**：增加运行按钮，用户可以先测试代码再提交
-- [ ] **失败用例展示**：答错时展示具体失败的测试用例（输入/期望/实际）
-- [ ] **题库扩充**：从 101 道扩展到 300+ 道，覆盖更多 LeetCode 题目
-- [ ] **前端优化**：响应式布局完善
+- [x] **运行按钮**：代码区右下角，运行不提交，结果内嵌展示
+- [x] **失败用例展示**：答错时展示第一条失败用例（输入 / 期望 / 实际）
+- [x] **判题序列化**：自动识别 TreeNode / ListNode / 有环链表，双向序列化
+- [x] **官方提示**：答题中查看 LeetCode 官方提示，分阶段展示
+- [x] **重做题目**：结果页一键重做当前题
 
 ### 中期（v0.3）
 
-- [ ] **判题升级**：实现 `judge0_judge.py`，接入 Judge0 沙箱，支持完整测试用例集
+- [ ] **判题升级**：接入 Judge0 沙箱，支持完整测试用例集和更多语言
 - [ ] **选题加速**：切换云端 LLM，选题从 8s 降至 2~3s
+- [ ] **多轮对话分析**：代码分析支持追问（需要更强的本地模型或云端 LLM）
 - [ ] **画像导出**：生成阶段性学习报告（PDF / 分享链接）
-- [ ] **多轮对话分析**：代码分析支持追问
 - [ ] **真实面试模式**：限时 + 不提示 + 事后复盘
 
 ### 长期（v1.0）
 
 - [ ] **用户账号系统**：OAuth 登录，跨设备同步画像
 - [ ] **错题本**：自动整理失败题目，定期安排复习
-- [ ] **社区题库**：用户共建测试用例和解题笔记
+- [ ] **题库扩充**：从 127 道扩展到 500+
 
 ---
 
