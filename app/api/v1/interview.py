@@ -167,6 +167,13 @@ async def swap_question(
     )
     question = result.scalar_one_or_none()
 
+    if not question:
+        logger.error(f"换题：Qdrant 返回 id={selected['id']} 但数据库中不存在，数据不一致")
+        raise HTTPException(
+            status_code=503,
+            detail="选题数据异常，请运行 check_data_integrity.py 修复数据后重试"
+        )
+
     # 创建新的面试会话
     new_session = InterviewSession(
         id=str(uuid.uuid4()),

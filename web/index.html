@@ -109,7 +109,6 @@
       <span class="timer" id="timer">--:--</span>
       <div class="nav-divider"></div>
       <button class="btn-outline sm" id="btn-swap" onclick="App.swap()">换题</button>
-      <button class="btn-solid sm" onclick="App.submit()">提交</button>
     </div>
     <div class="nav-right">
       <button class="interview-user" onclick="App.showStats()" id="interview-user-btn"></button>
@@ -135,6 +134,21 @@
         </select>
       </div>
       <div id="editor"></div>
+      <!-- 运行结果 + 操作按钮 -->
+      <div class="e-footer">
+        <div class="e-run-result" id="e-run-result" style="display:none">
+          <div class="e-run-result-header">
+            <span class="e-run-status" id="e-run-status"></span>
+            <span class="e-run-cases"  id="e-run-cases"></span>
+            <button class="e-run-close" onclick="App.closeRun()">✕</button>
+          </div>
+          <div class="e-run-detail" id="e-run-detail"></div>
+        </div>
+        <div class="e-actions">
+          <button class="btn-outline sm" id="btn-run" onclick="App.run()">运行</button>
+          <button class="btn-solid  sm" id="btn-submit" onclick="App.submit()">提交</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -150,6 +164,10 @@
   </nav>
   <main class="result-main">
     <div class="r-verdict" id="r-verdict"></div>
+    <div class="r-card" id="r-failed-case" style="display:none">
+      <p class="card-label">失败用例</p>
+      <div class="failed-case-body" id="failed-case-body"></div>
+    </div>
     <div class="r-card" id="r-analysis">
       <p class="card-label">AI 代码分析</p>
       <div class="analysis-body" id="analysis-body">

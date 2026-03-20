@@ -9,6 +9,7 @@ class AnalysisRequest(BaseModel):
     code:         str
     language:     str  = Field(description="python/javascript/java/cpp")
     time_used:    int  = Field(description="答题用时（秒）")
+    run_only:     bool = Field(False, description="仅运行模式：只跑用例，不写库不触发AI分析")
 
 
 class JudgeResult(BaseModel):
@@ -19,6 +20,10 @@ class JudgeResult(BaseModel):
     memory_kb:     int   = Field(0, description="内存使用（KB）")
     error_message: str   = Field("", description="错误信息")
     submit_count:  int   = Field(1)
+    # 第一条失败的测试用例详情（仅 Wrong Answer 时有值）
+    failed_input:    str | None = Field(None, description="失败用例的输入")
+    failed_expected: str | None = Field(None, description="失败用例的期望输出")
+    failed_actual:   str | None = Field(None, description="失败用例的实际输出")
 
 
 class RecommendQuestion(BaseModel):

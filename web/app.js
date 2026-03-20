@@ -192,6 +192,10 @@ function initEditor(lang = 'python') {
 
 // ── 题目面板重置（换题/新题前必须调用）──────────────
 function resetQuestionPanel() {
+  // 换题/选题时重置运行结果区
+  const r = $('e-run-result');
+  if (r) r.style.display = 'none';
+  
   $('q-title').textContent  = '加载中…';
   $('q-tags').innerHTML     = '';
   $('q-reason').textContent = '';
@@ -222,7 +226,12 @@ async function loadContent(sessionId) {
     const c = await req('GET', `/interview/session/${sessionId}/content`);
     $('q-content').innerHTML = c.content || '<p>暂无描述</p>';
     const lang    = $('lang').value;
-    const snippet = c.code_snippets?.find(s => s.langSlug === lang);
+    // LeetCode langSlug: python=Python2风格, python3=Python3风格
+    // 前端选 python 时，优先取 python3 模板（有类型注解，判题更准确）
+    const slugMap  = { python: 'python3', javascript: 'javascript' };
+    const targetSlug = slugMap[lang] || lang;
+    const snippet = c.code_snippets?.find(s => s.langSlug === targetSlug)
+                 || c.code_snippets?.find(s => s.langSlug === lang);
     if (snippet && S.editor) S.editor.setValue(snippet.code);
   } catch {
     $('q-content').innerHTML =
@@ -563,8 +572,9 @@ const App = {
     }
 
     show('result');
-    $('r-verdict').innerHTML    = '<span class="verdict-text">判题中…</span>';
-    $('r-recs').style.display   = 'none';
+    $('r-verdict').innerHTML       = '<span class="verdict-text">判题中…</span>';
+    $('r-recs').style.display      = 'none';
+    $('r-failed-case').style.display = 'none';
     $('analysis-body').innerHTML = `
       <div class="thinking">
         <span class="dot-pulse"></span>
@@ -605,6 +615,12 @@ const App = {
           </div>
         </div>`;
 
+      // 失败用例展示
+      if (!passed && jr.failed_input != null) {
+        $('r-failed-case').style.display = 'block';
+        $('failed-case-body').innerHTML  = _renderFailBlock(jr);
+      }
+
       streamAnalysis(S.sessionId);
 
     } catch (e) {
@@ -612,6 +628,65 @@ const App = {
         `<span class="verdict-text fail">提交失败</span>`;
       toast(`错误：${e.message}`);
     }
+  },
+
+  // ── 运行（不提交，不触发 AI 分析）─────────────────────
+  async run() {
+    const code = S.editor?.getValue() || '';
+    const lang = $('lang').value;
+
+    if (!code.trim() || code.trim() === TPL[lang].trim()) {
+      toast('请先写入你的解法');
+      return;
+    }
+
+    const btn = $('btn-run');
+    if (btn) { btn.disabled = true; btn.textContent = '运行中…'; }
+
+    // 展示运行结果区，显示 loading 状态
+    const resultEl = $('e-run-result');
+    $('e-run-status').className = 'e-run-status';
+    $('e-run-status').textContent = '运行中…';
+    $('e-run-cases').textContent  = '';
+    $('e-run-detail').innerHTML   = '';
+    resultEl.style.display = 'block';
+
+    try {
+      const res = await req('POST', '/analysis/submit', {
+        session_id: S.sessionId,
+        code,
+        language:   lang,
+        time_used:  0,
+        run_only:   true,
+      });
+
+      const jr     = res.judge_result;
+      const passed = jr.passed === jr.total && jr.status === 'Accepted';
+      const cls    = passed ? 'ac' : (jr.status === 'Compilation Error' ? 'err' : 'wa');
+      const text   = passed ? '全部通过 ✓' : jr.status;
+
+      $('e-run-status').className   = `e-run-status ${cls}`;
+      $('e-run-status').textContent = text;
+      $('e-run-cases').textContent  = `${jr.passed}/${jr.total} 用例`;
+
+      if (!passed && jr.failed_input != null) {
+        $('e-run-detail').innerHTML = _renderFailBlock(jr);
+      } else if (!passed && jr.error_message) {
+        $('e-run-detail').innerHTML =
+          `<div style="font-family:var(--mono);font-size:11px;color:var(--red);padding:4px 0;white-space:pre-wrap">${_esc(jr.error_message)}</div>`;
+      }
+
+    } catch (e) {
+      $('e-run-status').textContent = '运行失败';
+      $('e-run-detail').innerHTML =
+        `<div style="font-family:var(--mono);font-size:11px;color:var(--red);padding:4px 0">${_esc(e.message)}</div>`;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '运行'; }
+    }
+  },
+
+  closeRun() {
+    $('e-run-result').style.display = 'none';
   },
 
   async complete(sessionId) {
@@ -736,6 +811,32 @@ const App = {
     toast('已清除，以新用户身份重新开始');
   },
 };
+
+// ── 失败用例渲染 ──────────────────────────────────────
+function _renderFailBlock(jr) {
+  return `
+    <div class="fail-block">
+      <div class="fail-row">
+        <span class="fail-key">输入</span>
+        <span class="fail-val">${_esc(jr.failed_input || '')}</span>
+      </div>
+      <div class="fail-row">
+        <span class="fail-key">期望</span>
+        <span class="fail-val expected">${_esc(jr.failed_expected || '')}</span>
+      </div>
+      <div class="fail-row">
+        <span class="fail-key">实际</span>
+        <span class="fail-val actual">${_esc(jr.failed_actual || '（无输出）')}</span>
+      </div>
+    </div>`;
+}
+
+function _esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
 // ── 雷达图 ───────────────────────────────────────────
 function _drawRadar(canvas, skills) {

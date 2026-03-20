@@ -1068,3 +1068,162 @@ h1 em { font-style: italic; color: var(--ink-3); }
   0%   { transform: translateX(-100%); width: 60%; }
   100% { transform: translateX(200%);  width: 60%; }
 }
+/* ── 运行结果浮层 ────────────────────────────────── */
+.run-modal {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 300;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+}
+.run-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.14);
+  overflow: hidden;
+  animation: up .18s ease;
+}
+.run-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-2);
+}
+.run-card-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  letter-spacing: .4px;
+}
+.run-card-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ink-4);
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+}
+.run-card-close:hover { color: var(--ink); }
+.run-result-body { padding: 14px 16px; }
+.run-verdict-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.run-status {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+}
+.run-status.ac  { color: var(--green); }
+.run-status.wa  { color: var(--red); }
+.run-status.err { color: var(--amber); }
+.run-cases {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-4);
+}
+
+/* 失败用例详情（运行和结果页共用） */
+.fail-block {
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.fail-row {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  border-bottom: 1px solid var(--line);
+}
+.fail-row:last-child { border-bottom: none; }
+.fail-key {
+  padding: 8px 10px;
+  color: var(--ink-4);
+  font-size: 11px;
+  background: var(--paper-3);
+  border-right: 1px solid var(--line);
+  display: flex;
+  align-items: flex-start;
+}
+.fail-val {
+  padding: 8px 10px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.5;
+}
+.fail-val.expected { color: var(--green); }
+.fail-val.actual   { color: var(--red); }
+
+/* ── 失败用例结果页卡片 ──────────────────────────── */
+.failed-case-body { padding: 4px 0 4px; }
+
+/* ── 编辑器底部：运行结果 + 操作按钮 ────────────── */
+.e-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+}
+
+/* 运行结果区（可折叠） */
+.e-run-result {
+  border-bottom: 1px solid var(--line);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.e-run-result-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--paper-2);
+  position: sticky;
+  top: 0;
+}
+.e-run-status {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+}
+.e-run-status.ac  { color: var(--green); }
+.e-run-status.wa  { color: var(--red); }
+.e-run-status.err { color: #b45309; }
+.e-run-cases {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-4);
+  flex: 1;
+}
+.e-run-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ink-4);
+  font-size: 13px;
+  padding: 0;
+  line-height: 1;
+}
+.e-run-close:hover { color: var(--ink); }
+.e-run-detail {
+  padding: 0 16px 12px;
+}
+
+/* 操作按钮行 */
+.e-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+}

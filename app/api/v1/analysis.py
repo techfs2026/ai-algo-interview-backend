@@ -28,20 +28,22 @@ async def submit_code(
     db:  AsyncSession = Depends(get_db),
 ):
     """
-    提交代码到 Judge0 判题。
-    返回判题结果，不包含 AI 分析（AI 分析走流式接口）。
+    提交代码判题。
+
+    run_only=True：仅运行模式，只跑测试用例，不写库、不触发 AI 分析、不更新画像。
+    run_only=False（默认）：正式提交，写库，后续触发 AI 分析。
     """
     # 获取会话和题目
     session, question = await _get_session_and_question(req.session_id, db)
 
-    # 检查 Judge0 健康状态
+    # 检查判题服务健康状态
     if not await judge_service.health_check():
         raise HTTPException(
             status_code=503,
             detail="判题服务暂时不可用，请确认 Judge0 已启动（docker compose up -d）"
         )
 
-    # 从数据库读取测试用例（只读数据库，不做临时解析）
+    # 从数据库读取测试用例
     test_cases = await judge_service.get_test_cases(
         question_id=question.id,
         db=db,
@@ -54,24 +56,37 @@ async def submit_code(
         test_cases=test_cases,
     )
 
-    # 更新会话状态
-    session.code          = req.code
-    session.language      = req.language
-    session.time_used     = req.time_used
-    session.passed        = result.passed
-    session.total         = result.total
-    session.submit_count  = (session.submit_count or 0) + 1
-    session.status        = "submitted"
-    session.finished_at   = datetime.utcnow()
+    # 运行模式：只返回结果，不写库
+    if req.run_only:
+        return {
+            "session_id":     req.session_id,
+            "judge_result":   result.model_dump(),
+            "question_id":    question.id,
+            "question_title": question.title,
+            "difficulty":     question.difficulty,
+            "tags":           question.tags,
+            "run_only":       True,
+        }
+
+    # 正式提交：写库
+    session.code         = req.code
+    session.language     = req.language
+    session.time_used    = req.time_used
+    session.passed       = result.passed
+    session.total        = result.total
+    session.submit_count = (session.submit_count or 0) + 1
+    session.status       = "submitted"
+    session.finished_at  = datetime.utcnow()
     await db.commit()
 
     return {
-        "session_id":    req.session_id,
-        "judge_result":  result.model_dump(),
-        "question_id":   question.id,
-        "question_title":question.title,
-        "difficulty":    question.difficulty,
-        "tags":          question.tags,
+        "session_id":     req.session_id,
+        "judge_result":   result.model_dump(),
+        "question_id":    question.id,
+        "question_title": question.title,
+        "difficulty":     question.difficulty,
+        "tags":           question.tags,
+        "run_only":       False,
     }
 
 
